@@ -1,0 +1,37 @@
+name: Validate JS Overwrites
+
+on:
+  pull_request:
+    paths:
+      - 'Clash Party/**/*.js'
+      - 'FlClash/**/*.js'
+      - 'tools/validate-js-overwrites.js'
+      - '.github/workflows/validate-js-overwrites.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Clash Party/**/*.js'
+      - 'FlClash/**/*.js'
+      - 'tools/validate-js-overwrites.js'
+      - '.github/workflows/validate-js-overwrites.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate JS overwrite contracts
+        run: node tools/validate-js-overwrites.js
