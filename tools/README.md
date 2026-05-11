@@ -33,3 +33,35 @@ node tools/validate-js-overwrites.js --target flclash
 node tools/validate-js-overwrites.js --json
 node tools/validate-js-overwrites.js --verbose
 ```
+
+## Cross-client artifact contract
+
+Run:
+
+```bash
+node tools/validate-artifact-contracts.js
+```
+
+Scope:
+
+- compiles the JS overwrite artifacts and checks that Normal / FlClash follow
+  the Clash Party Smart baseline version;
+- checks static group counts for CMFA, Shadowrocket, Surge, Loon, and
+  Quantumult X;
+- validates SingBox and v2rayN JSON structure and baseline metadata;
+- extracts OpenClash heredoc YAML and, when Ruby is available, parses it through
+  Ruby/Psych to catch duplicate top-level `rule-providers` / `rules` keys;
+- checks Passwall / Passwall2 shunt-rule counts and rejects Clash-style rule
+  prefixes inside `.list` files;
+- includes legacy reference `.conf` files in the sha256 manifest and warns when
+  they drift from the authoritative `.sh` / shunt-rule artifacts;
+- can emit a sha256 manifest for release review without changing any published
+  artifact.
+
+Useful options:
+
+```bash
+node tools/validate-artifact-contracts.js --json
+node tools/validate-artifact-contracts.js --strict-ruby
+node tools/validate-artifact-contracts.js --write-manifest docs/runtime/artifact-manifest.json
+```

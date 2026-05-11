@@ -98,6 +98,13 @@ const BIZ_GROUPS = [
 const EXPECTED_GROUP_ORDER = [SMART_GROUPS[0], ...BIZ_GROUPS, ...SMART_GROUPS.slice(1)];
 const DIRECT_POLICIES = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS']);
 const INFO_NODES = new Set(['剩余流量 10G', '官网 example.com', 'USE 100GB']);
+const EXTRA_INFO_NODES = new Set(['距离下次重置 12 天', '套餐到期 2026-06-01', 'Panel Channel Author']);
+const COST_AND_LINE_QUALITY_CASES = [
+  'JP 02 0.2x Saver Home x0.2',
+  'HK IPLC 03 x3',
+];
+const DIRECT_PROCESS_RULES = ['WorkPro.exe', 'GCUService.exe', 'GSCService.exe', 'Weixin.exe', 'WeChat.exe', 'QQ.exe'];
+const WORK_PROVIDER_RULES = ['remotedesktop', 'acc-rustdesk', 'acc-parsec'];
 
 const CLASSIFICATION_CASES = [
   ['HKG 01 IEPL x1', 'HK'],
@@ -199,6 +206,11 @@ function makeFixtureConfig() {
       makeProxy('剩余流量 10G'),
       makeProxy('官网 example.com'),
       makeProxy('USE 100GB'),
+      makeProxy('距离下次重置 12 天'),
+      makeProxy('套餐到期 2026-06-01'),
+      makeProxy('Panel Channel Author'),
+      makeProxy('JP 02 0.2x Saver Home x0.2'),
+      makeProxy('HK IPLC 03 x3'),
     ],
     'proxy-groups': [
       { name: '机场自动选择', type: 'url-test', proxies: ['HKG 01 IEPL x1'] },
@@ -301,18 +313,25 @@ function validateClassification(target, api, fixture, record) {
   const classified = api.classifyAllNodes(fixture.proxies);
   const all = new Set(classified.ALL || []);
   for (const proxy of fixture.proxies) {
-    if (INFO_NODES.has(proxy.name)) {
+    if (INFO_NODES.has(proxy.name) || EXTRA_INFO_NODES.has(proxy.name)) {
       record.expect(!all.has(proxy.name), `info node ${proxy.name} is excluded from classified ALL`);
     } else {
       record.expect(all.has(proxy.name), `traffic node ${proxy.name} is present in classified ALL`);
     }
   }
+  for (const name of COST_AND_LINE_QUALITY_CASES) {
+    record.expect(all.has(name), `cost or line-quality tag stays as a usable traffic node: ${name}`);
+  }
   record.expect((classified.HOME_ALL || []).includes('HKG 01 IEPL x1'), 'IEPL nodes are treated as home-quality nodes');
+  record.expect((classified.HOME_ALL || []).includes('HK IPLC 03 x3'), 'IPLC nodes are treated as home-quality nodes');
+  record.expect((classified.HOME_ALL || []).includes('JP 02 0.2x Saver Home x0.2'), 'low-multiplier home nodes are treated as home-quality nodes');
   record.expect(!(classified.HOME_ALL || []).includes('HK 09 Standard x1'), 'standard nodes do not leak into home groups');
   record.expect((classified.HK || []).includes('深港 IEPL 02 x1'), 'HK classifier covers the bare 港 suffix case');
+  record.expect((classified.HK || []).includes('HK IPLC 03 x3'), 'HK classifier keeps high-multiplier IPLC nodes in the HK bucket');
   record.expect((classified.TW || []).includes('TWN 01 AnyRoute IEPL x2.5'), 'alpha-3 TWN reaches Taiwan bucket');
   record.expect((classified.SG || []).includes('SGP 01 Home x1'), 'alpha-3 SGP reaches Singapore bucket');
   record.expect((classified.JP || []).includes('JPN 01 Tokyo Home x1'), 'alpha-3 JPN reaches Japan bucket');
+  record.expect((classified.JP || []).includes('JP 02 0.2x Saver Home x0.2'), 'low-multiplier JP node reaches Japan bucket');
   record.expect((classified.KR || []).includes('KOR 01 Seoul Home x1'), 'alpha-3 KOR reaches Korea bucket');
 }
 
@@ -407,6 +426,18 @@ function validateRulesAndProviders(output, record, target) {
     rules.some((rule) => /^RULE-SET,tiktok,🎵 TikTok/.test(String(rule))),
     'TikTok has its dedicated rule target',
   );
+  for (const processName of DIRECT_PROCESS_RULES) {
+    record.expect(
+      rules.includes(`PROCESS-NAME,${processName},DIRECT`),
+      `local client process stays on DIRECT: ${processName}`,
+    );
+  }
+  for (const providerName of WORK_PROVIDER_RULES) {
+    record.expect(
+      rules.includes(`RULE-SET,${providerName},🧑‍💼 会议协作`),
+      `remote-work provider stays in the work collaboration group: ${providerName}`,
+    );
+  }
 
   if (target.requireTunExcludes) {
     const excludes = output.tun && output.tun['exclude-process'];

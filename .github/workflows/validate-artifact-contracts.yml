@@ -1,0 +1,73 @@
+name: Validate Artifact Contracts
+
+on:
+  pull_request:
+    paths:
+      - 'Clash Party/**/*.js'
+      - 'Clash Meta For Android/**/*.yaml'
+      - 'OpenClash/**/*.conf'
+      - 'OpenClash/**/*.sh'
+      - 'Shadowrocket/**/*.conf'
+      - 'Surge/**/*.conf'
+      - 'Loon/**/*.conf'
+      - 'Quantumult X/**/*.conf'
+      - 'SingBox/**/*.json'
+      - 'v2rayN/**/*.json'
+      - 'Passwall/**/*.sh'
+      - 'Passwall/**/*.conf'
+      - 'Passwall/shunt-rules/**/*.list'
+      - 'Passwall2/**/*.sh'
+      - 'Passwall2/**/*.conf'
+      - 'Passwall2/shunt-rules/**/*.list'
+      - 'tools/validate-artifact-contracts.js'
+      - '.github/workflows/validate-artifact-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Clash Party/**/*.js'
+      - 'Clash Meta For Android/**/*.yaml'
+      - 'OpenClash/**/*.conf'
+      - 'OpenClash/**/*.sh'
+      - 'Shadowrocket/**/*.conf'
+      - 'Surge/**/*.conf'
+      - 'Loon/**/*.conf'
+      - 'Quantumult X/**/*.conf'
+      - 'SingBox/**/*.json'
+      - 'v2rayN/**/*.json'
+      - 'Passwall/**/*.sh'
+      - 'Passwall/**/*.conf'
+      - 'Passwall/shunt-rules/**/*.list'
+      - 'Passwall2/**/*.sh'
+      - 'Passwall2/**/*.conf'
+      - 'Passwall2/shunt-rules/**/*.list'
+      - 'tools/validate-artifact-contracts.js'
+      - '.github/workflows/validate-artifact-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Validate JS overwrite contracts
+        run: node tools/validate-js-overwrites.js
+
+      - name: Validate cross-client artifact contracts
+        run: node tools/validate-artifact-contracts.js --strict-ruby
