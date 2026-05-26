@@ -4,6 +4,12 @@
 
 ---
 
+## v5.4.16-Surge.3 (2026-05-26)
+
+- ✅ FIX#SURGE-PORT-RULE：Surge 端口规则统一改为官方 `DEST-PORT`
+  - 修复导入时报「第 331 行存在无效配置：`DST-PORT,7680,REJECT`」的问题
+  - 依据 [Surge Manual `Misc Rule / DEST-PORT`](https://manual.nssurge.com/rule/misc-rule.html#dest-port)；Shadowrocket / Mihomo / OpenClash 的 `DST-PORT` 语法不受影响
+
 ## v5.4.16-Surge.2 (2026-05-22)
 
 - ✅ FEAT#GAME-ACCEL：新增游戏加速器 `PROCESS-NAME -> DIRECT` 白名单
