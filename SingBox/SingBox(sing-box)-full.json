@@ -5,7 +5,7 @@
   },
   "_meta": {
     "name": "SingBox Smart Full",
-    "version": "v5.4.17-sing.1",
+    "version": "v5.4.17-sing.2",
     "build": "2026-05-26",
     "baseline": "Clash Party v5.4.17",
     "changelog": "见 SingBox/CHANGELOG.md"
@@ -35,7 +35,7 @@
         "tag": "dns_proxy",
         "address": "https://cloudflare-dns.com/dns-query",
         "address_resolver": "dns_bootstrap",
-        "detour": "🌍 全球节点",
+        "detour": "🚀 节点选择",
         "strategy": "prefer_ipv4"
       }
     ],

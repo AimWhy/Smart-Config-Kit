@@ -553,6 +553,9 @@ function validateJsonProducts(record, baselineVersion) {
   });
   record.check('singbox.dns.direct-bootstrap-resolver', dnsServerByTag.dns_direct && dnsServerByTag.dns_direct.address_resolver === 'dns_bootstrap');
   record.check('singbox.dns.proxy-bootstrap-resolver', dnsServerByTag.dns_proxy && dnsServerByTag.dns_proxy.address_resolver === 'dns_bootstrap');
+  record.check('singbox.dns.proxy-detour-main-selector', dnsServerByTag.dns_proxy && dnsServerByTag.dns_proxy.detour === '🚀 节点选择', {
+    value: dnsServerByTag.dns_proxy && dnsServerByTag.dns_proxy.detour,
+  });
   const singboxPrivateDnsDirect = dnsRules.some((rule) => (
     Array.isArray(rule.rule_set) && rule.rule_set.includes('geosite-private') && rule.server === 'dns_direct'
   ));

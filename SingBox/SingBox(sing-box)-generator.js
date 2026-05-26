@@ -1,7 +1,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const VERSION = 'v5.4.17-sing.1';
+const VERSION = 'v5.4.17-sing.2';
 const BUILD = '2026-05-26';
 const BASELINE = 'Clash Party v5.4.17';
 
@@ -535,7 +535,7 @@ baseConfig.dns = {
       tag: 'dns_proxy',
       address: 'https://cloudflare-dns.com/dns-query',
       address_resolver: 'dns_bootstrap',
-      detour: SMART.GLOBAL,
+      detour: '🚀 节点选择',
       strategy: 'prefer_ipv4'
     }
   ],

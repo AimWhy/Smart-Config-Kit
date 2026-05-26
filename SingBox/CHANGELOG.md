@@ -5,6 +5,12 @@
 
 ---
 
+## v5.4.17-sing.2 (2026-05-26)
+
+- ✅ FIX#DNS-SINGBOX-SELECTOR：`dns_proxy.detour` 改回 `🚀 节点选择`
+  - 避免默认国外 DNS 直接绕过用户主选择器进入 `🌍 全球节点` urltest 链
+  - 保留 Cloudflare DoH + `dns_bootstrap` 自举结构不变
+
 ## v5.4.17-sing.1 (2026-05-26)
 
 - ✅ FIX#DNS-SPLIT-BOOTSTRAP：由生成器重建 Full JSON，同步 v5.4.17 DNS split-bootstrap 语义
