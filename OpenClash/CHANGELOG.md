@@ -7,6 +7,10 @@
 
 ---
 
+## v5.4.21-oc-normal.1 / v5.4.21-oc-smart.1 (2026-05-31)
+
+#4 借鉴 Proxy-override：`default-nameserver` 从纯明文 IP 升级为 DoH-over-IP + 1 明文兜底（阿里×2 + Google + CF）；消除 bootstrap 阶段 DNS 泄漏。
+
 ## v5.4.20-oc-normal.1 / v5.4.20-oc-smart.1 (2026-05-30)
 
 借鉴 Proxy-override 批 B · #6 节点过滤关键词补充（Normal / Smart 同步；spec：`docs/2026-05-30-proxy-override-借鉴设计.md`）：

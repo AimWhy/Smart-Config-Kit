@@ -7,6 +7,10 @@
 
 ---
 
+## v5.4.21-v2n.1 (2026-05-31)
+
+- N/A#4 DoH-over-IP bootstrap：v2rayN Xray 路由 JSON 不承载 DNS resolver（只有 route/proxy/direct/block），#4 不适用；版本跟随基线对齐。
+
 ## v5.4.20-v2n.1 (2026-05-30)
 
 - N/A#6 节点过滤关键词补充（批 B）：Xray 路由 JSON 无运行时节点分类 / junk 过滤器，#6 不适用；版本跟随 Clash Party v5.4.20 基线对齐。

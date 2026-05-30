@@ -7,6 +7,14 @@
 
 ---
 
+## v5.4.21 / v5.4.21-normal.1 (2026-05-31)
+
+借鉴 Proxy-override 批 D · #4 DoH-over-IP bootstrap（spec：`docs/2026-05-30-proxy-override-借鉴设计.md`）：
+
+- `default-nameserver` 从纯明文 IP 升级为 DoH-over-IP（`https://IP/dns-query`） + 1 个明文 IP 兜底 `223.5.5.5`
+- 消除 bootstrap 阶段 DNS 泄漏；阿里×2（`223.5.5.5`/`223.6.6.6`） + Google（`8.8.8.8`） + Cloudflare（`1.1.1.1`）
+- 溯源：mihomo 官方 wiki 明确 `default-nameserver` 支持加密 DNS（DoH/DoT/DoQ）；mihomo ≥ 1.18.x
+
 ## v5.4.20 / v5.4.20-normal.1 (2026-05-30)
 
 借鉴 Proxy-override 批 B · #6 节点过滤关键词补充（spec：`docs/2026-05-30-proxy-override-借鉴设计.md`）：

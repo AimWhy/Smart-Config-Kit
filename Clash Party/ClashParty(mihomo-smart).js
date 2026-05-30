@@ -1,14 +1,14 @@
 ﻿// Clash Smart 内核覆写脚本 - SUB-STORE 多机场精细分流版
-// 版本：v5.4.20 (2026-05-30)
+// 版本：v5.4.21 (2026-05-31)
 // 架构：SUB-STORE 多机场融合 + 22 Smart 区域组（11 全部 + 11 家宽）+ 32 业务策略组（含 14 流媒体平台组）+ 385 rule-providers 100%+ 服务覆盖
-// v5.4.20: 借鉴 Proxy-override 批B（#6 节点过滤 junk 关键词补充 免费/试用/应急/Sign/Login/Register/Help/FAQ）· v5.4.19: 批A（国内SDK/CDN直连·fake-ip-filter·direct-nameserver-follow-policy）· v5.4.17: DNS split-bootstrap
+// v5.4.21: 借鉴 Proxy-override 批D（#4 DoH-over-IP bootstrap）· v5.4.20: 批B（#6 节点过滤 junk 关键词）· v5.4.19: 批A（#2/#3/#5）· v5.4.17: DNS split-bootstrap
 // 变更历史：见 `Clash Party/CHANGELOG.md`
 
 // ================================================================
 //  版本常量
 // ================================================================
 
-const VERSION = 'v5.4.20'
+const VERSION = 'v5.4.21'
 
 // v5.4.9 FEAT#LOCAL-TOOLS:
 // Desktop-capable local tools that should not be routed through proxy nodes.
@@ -2353,9 +2353,9 @@ function overwriteGeneral(config) {
   config.dns['respect-rules'] = true
   config.dns['use-system-hosts'] = false
   config.dns['cache-algorithm'] = 'arc'
-  // v5.4.17 FIX#DNS-SPLIT-BOOTSTRAP: default-nameserver 只保留纯 IP 自举；
-  // nameserver / direct-nameserver / proxy-server-nameserver 固定走 DoH，避免普通解析回落到系统 DNS。
-  var bootstrapDns = ['223.5.5.5', '119.29.29.29', '1.1.1.1', '8.8.8.8']
+  // v5.4.21 #4 借鉴 Proxy-override：default-nameserver 从纯明文 IP 升级为 DoH-over-IP（IP host + https scheme）+
+  // 1 个明文兜底；消除 bootstrap 阶段的 DNS 泄漏，同时保留明文韧性（防 443 被劫持/首包失败）。
+  var bootstrapDns = ['https://223.5.5.5/dns-query', 'https://223.6.6.6/dns-query', 'https://8.8.8.8/dns-query', 'https://1.1.1.1/dns-query', '223.5.5.5']
   var domesticDoH = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query']
   var foreignDoH = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/dns-query']
   var proxyDoH = foreignDoH.concat(domesticDoH)

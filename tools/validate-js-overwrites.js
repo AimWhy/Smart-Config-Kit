@@ -521,7 +521,7 @@ function validateGeneral(output, record) {
   for (const entry of STUN_FAKE_IP_FILTER_ENTRIES) {
     record.expect(Array.isArray(output.dns['fake-ip-filter']) && output.dns['fake-ip-filter'].includes(entry), `STUN/TURN domain receives real IP in fake-ip-filter: ${entry}`);
   }
-  record.expectArrayEqual(output.dns['default-nameserver'], ['223.5.5.5', '119.29.29.29', '1.1.1.1', '8.8.8.8'], 'default DNS bootstrap stays pure IP');
+  record.expectArrayEqual(output.dns['default-nameserver'], ['https://223.5.5.5/dns-query', 'https://223.6.6.6/dns-query', 'https://8.8.8.8/dns-query', 'https://1.1.1.1/dns-query', '223.5.5.5'], 'v5.4.21 #4 DoH-over-IP bootstrap + 1 plaintext fallback');
   record.expectArrayEqual(output.dns.nameserver, ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'], 'primary nameserver is domestic DoH');
   record.expectArrayEqual(output.dns['direct-nameserver'], ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'], 'direct DNS is domestic DoH');
   record.expectArrayEqual(output.dns['proxy-server-nameserver'], ['https://cloudflare-dns.com/dns-query', 'https://dns.google/dns-query', 'https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'], 'proxy server DNS is foreign DoH first with domestic DoH backup');
