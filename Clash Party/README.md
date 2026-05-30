@@ -80,6 +80,7 @@
 - ❌ **找不到业务组 / 区域组**：确认订阅返回的是 Mihomo / Clash.Meta 格式（不是 Surge / Quantumult）。
 - ❌ **RustDesk 仍然超时**：v5.4.12 后 RustDesk 应命中 `🧑‍💼 会议协作`，不要让该组停在 `DIRECT`；DNS 段应采用 v5.4.17 split-bootstrap（default 纯 IP，其它 resolver 全 DoH），并且 `fake-ip-filter` 应包含 `+.rustdesk.com` 真实 IP 回应。
 - ❌ **WebRTC / STUN 测出代理出口或失败**：v5.4.13 后标准 STUN/TURN 端口 `3478 / 3479 / 5349 / 19302 / 19305 / 19307` 应直连；若服务强制走 UDP/443 TURN，仍会受 QUIC 屏蔽策略影响。
+- ⚙️ **QUIC 精细化（v5.4.22 默认开，如何关闭）**：仅放行 YouTube/Google/微软/苹果 的 QUIC（UDP/443）走对应业务组，其余海外 QUIC 一律 `REJECT` 强制回退 HTTP/2（配合 `config.sniffer` 嗅探 SNI 做 GEOSITE 匹配）。**若某海外小众 App 必须用 QUIC 且无法回退 TCP 而断连**：在 `injectRules` 中删除/注释那 5 条 `AND,((DST-PORT,443),(NETWORK,UDP),...)` 规则即可恢复全量 QUIC 透传；只想恢复一部分则保留白名单豁免行、删掉末条 `...,(NOT,((GEOSITE,cn)))),REJECT` 即可。
 
 ---
 

@@ -2435,6 +2435,23 @@ function overwriteGeneral(config) {
     '+.mcdn.bilivideo.cn',
     '+.miwifi.com'
   ]))
+  // v5.4.22 #1 借鉴 Proxy-override：QUIC SNI 嗅探（对齐 CMFA/OpenClash 的 sniffer）。
+  //   force-dns-mapping 把真实 IP 连接（含 batch A 放进 fake-ip-filter 的域名，如 mcdn.bilivideo.cn）
+  //   映射回域名，使 QUIC 精细化的 GEOSITE/RULE-SET 匹配对真 IP QUIC 同样生效；否则真 IP QUIC 会被
+  //   NOT,((GEOSITE,cn)) 误判 REJECT。skip-dst-address 跳过 Telegram 网段（MTProto 会干扰嗅探）。
+  config.sniffer = {
+    enable: true,
+    'parse-pure-ip': true,
+    'force-dns-mapping': true,
+    'override-destination': true,
+    sniff: {
+      HTTP: { ports: ['80', '8080-8880'], 'override-destination': true },
+      TLS: { ports: ['443', '8443'] },
+      QUIC: { ports: ['443', '8443', '4433'] }
+    },
+    'skip-domain': ['+.push.apple.com'],
+    'skip-dst-address': ['91.105.192.0/23', '91.108.4.0/22', '91.108.8.0/21', '91.108.16.0/21', '91.108.56.0/22', '95.161.64.0/20', '149.154.160.0/20', '185.76.151.0/24', '2001:67c:4e8::/48', '2001:b28:f23c::/47', '2001:b28:f23f::/48', '2a0a:f280:203::/48']
+  }
   // v5.4.1 P3: Mixed Listeners——按地区分配端口，SwitchyOmega 一键切地区
   if (!config.listeners) config.listeners = []
   var regionPorts = [

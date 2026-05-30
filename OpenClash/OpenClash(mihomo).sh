@@ -110,10 +110,9 @@ dns:
   # 对齐 Clash Party v5.4.17 基线：default-nameserver 纯 IP，其它 resolver 固定 DoH
   # FIX#HOSTS-ALIGN: use-hosts 改 true（对齐主线启用 hosts 预解析，消除 fake-ip 冷启动循环依赖）
   use-hosts: true
-  # v5.4.21 #4 借鉴 Proxy-override：default-nameserver DoH-over-IP + 1 明文兜底
-  use-hosts: false
   use-system-hosts: false
   respect-rules: true
+  # v5.4.21 #4 借鉴 Proxy-override：default-nameserver DoH-over-IP + 1 明文兜底
   default-nameserver:
   - 'https://223.5.5.5/dns-query'
   - 'https://223.6.6.6/dns-query'

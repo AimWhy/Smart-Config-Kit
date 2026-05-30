@@ -9,6 +9,8 @@
 
 #1 借鉴 Proxy-override：QUIC 精细化——AND 规则白名单豁免（YouTube/Google/MS/Apple 的 QUIC 走对应业务组）；其余非 CN QUIC REJECT。首次补齐 CMFA 的 QUIC AND 规则（此前缺失）。
 
+- 兜底判据 `GEOIP,CN` → `GEOSITE,cn`（**有意的语义变更**，fake-ip 下更可靠）；CMFA 既有 `sniffer`（force-dns-mapping）保障真 IP QUIC 的 GEOSITE 匹配。
+
 ## v5.4.21-cmfa.1 (2026-05-31)
 
 #4 借鉴 Proxy-override：`default-nameserver` 从纯明文 IP 升级为 DoH-over-IP + 1 明文兜底；消除 bootstrap 阶段 DNS 泄漏。
