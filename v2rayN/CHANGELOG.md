@@ -7,6 +7,10 @@
 
 ---
 
+## v5.4.22-v2n.1 (2026-05-31)
+
+- N/A#1 QUIC 精细化：v2rayN Xray 路由 JSON 不承载 QUIC 阻断，#1 不适用；版本跟随基线对齐。
+
 ## v5.4.21-v2n.1 (2026-05-31)
 
 - N/A#4 DoH-over-IP bootstrap：v2rayN Xray 路由 JSON 不承载 DNS resolver（只有 route/proxy/direct/block），#4 不适用；版本跟随基线对齐。

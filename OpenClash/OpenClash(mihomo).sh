@@ -2,12 +2,12 @@
 . /usr/share/openclash/log.sh
 
 # ============================================================================
-# Clash Smart v5.4.21-oc-normal.1 — OpenClash 覆写脚本（非 Smart 内核 / url-test 区域组）
+# Clash Smart v5.4.22-oc-normal.1 — OpenClash 覆写脚本（非 Smart 内核 / url-test 区域组）
 # Build: 2026-05-31
 # ============================================================================
 # 定位：与同目录 OpenClash(mihomo-smart).sh 规则 100% 等价的「非 Smart 内核」版本。
 #       两者唯一区别：22 个区域组（11 全部 + 11 家宽）从 type: smart（uselightgbm）换成 type: url-test。
-#       对齐 Clash Party v5.4.21 JS 基线。
+#       对齐 Clash Party v5.4.22 JS 基线。
 #       适用场景：
 #         - OpenClash 内核选的是 Meta(mihomo 稳定版) 而非 Meta Alpha，不支持 smart + LightGBM
 #         - 或者明确想关闭 LightGBM ML 评估、只靠经典 url-test 延迟选路
@@ -26,7 +26,7 @@
 
 
 
-VERSION_TAG="v5.4.21-oc-normal.1"
+VERSION_TAG="v5.4.22-oc-normal.1"
 CONFIG_FILE="$1"
 LOG_FILE="/tmp/openclash.log"
 
@@ -3271,6 +3271,12 @@ rules:
 - "RULE-SET,miuiprivacy,\U0001F6D1 广告拦截"
 - "RULE-SET,privacy,\U0001F6D1 广告拦截"
 - "RULE-SET,youmengchuangxiang,\U0001F6D1 广告拦截"
+  # v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——YouTube/Google/MS/Apple 白名单豁免，其余海外 QUIC REJECT
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),\U0001F4F9 YouTube"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),\U0001F527 工具与服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,microsoft)),\U24C2️ 微软服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,apple)),\U0001F34E 苹果服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT"
 - DST-PORT,7680,REJECT
 - GEOSITE,private,DIRECT
 - GEOIP,private,DIRECT,no-resolve
@@ -4364,7 +4370,7 @@ cat > "$RUBY_SCRIPT" << 'RUBY_EOF'
 require 'yaml'
 require 'digest'
 
-VERSION = "v5.4.21-oc-normal.1"
+VERSION = "v5.4.22-oc-normal.1"
 
 STATUS_LOG = "/tmp/clash_normal_status.log"
 File.open(STATUS_LOG, 'w') { |f| f.puts "[#{VERSION}] start" }

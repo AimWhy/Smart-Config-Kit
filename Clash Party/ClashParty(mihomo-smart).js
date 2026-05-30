@@ -1,14 +1,14 @@
 ﻿// Clash Smart 内核覆写脚本 - SUB-STORE 多机场精细分流版
-// 版本：v5.4.21 (2026-05-31)
+// 版本：v5.4.22 (2026-05-31)
 // 架构：SUB-STORE 多机场融合 + 22 Smart 区域组（11 全部 + 11 家宽）+ 32 业务策略组（含 14 流媒体平台组）+ 385 rule-providers 100%+ 服务覆盖
-// v5.4.21: 借鉴 Proxy-override 批D（#4 DoH-over-IP bootstrap）· v5.4.20: 批B（#6 节点过滤 junk 关键词）· v5.4.19: 批A（#2/#3/#5）· v5.4.17: DNS split-bootstrap
+// v5.4.22: 借鉴 Proxy-override 批C（#1 QUIC 精细化）· v5.4.21: 批D（#4 DoH-over-IP）· v5.4.20: 批B（#6 junk 过滤）· v5.4.19: 批A（#2/#3/#5）
 // 变更历史：见 `Clash Party/CHANGELOG.md`
 
 // ================================================================
 //  版本常量
 // ================================================================
 
-const VERSION = 'v5.4.21'
+const VERSION = 'v5.4.22'
 
 // v5.4.9 FEAT#LOCAL-TOOLS:
 // Desktop-capable local tools that should not be routed through proxy nodes.
@@ -1289,8 +1289,12 @@ function injectRules(config) {
     `RULE-SET,miuiprivacy,${BIZ.AD}`,
     `RULE-SET,privacy,${BIZ.AD}`,
     `RULE-SET,youmengchuangxiang,${BIZ.AD}`,
-    // v5.4.1 P3: QUIC 条件阻断——阻断海外 QUIC (UDP/443)，保留国内 QUIC，减少 UDP 超时
-    `AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOIP,CN)))),REJECT`,
+    // v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——YouTube/Google/MS/Apple 白名单豁免（QUIC 走对应业务组），其余海外 QUIC REJECT 强制回退 HTTP/2
+    `AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),${BIZ.YT}`,
+    `AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),${BIZ.TOOLS}`,
+    `AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,microsoft)),${BIZ.MS}`,
+    `AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,apple)),${BIZ.APPLE}`,
+    `AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT`,
     // v5.2.1 FIX#19: DST-PORT,7680 必须在 GEOIP,private 之前，否则私有 IP 先匹配走 DIRECT
     'DST-PORT,7680,REJECT',
     'GEOSITE,private,DIRECT',

@@ -4,6 +4,10 @@
 
 ---
 
+## v5.4.22-Surge.1 (2026-05-31)
+
+- N/A#1 QUIC 精细化：Surge block-quic 是引擎级开关，不支持 AND/NOT 白名单豁免。QUIC 精细化由 mihomo 产物承载。
+
 ## v5.4.21-Surge.1 (2026-05-31)
 
 #4 借鉴 Proxy-override：`encrypted-dns-server` / `fallback-dns-server` 从域名 DoH 改为 IP-host DoH，消除 bootstrap 阶段 DNS 泄漏；`dns-server` 明文 IP 保留兜底。

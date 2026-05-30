@@ -2,10 +2,10 @@
 . /usr/share/openclash/log.sh
 
 # ============================================================================
-# Clash Smart v5.4.21-oc-smart.1 — OpenClash 覆写脚本（与 Clash Party 主线同等规则量）
+# Clash Smart v5.4.22-oc-smart.1 — OpenClash 覆写脚本（与 Clash Party 主线同等规则量）
 # Build: 2026-05-31
 # ============================================================================
-# 定位：对齐 Clash Party v5.4.21 JS 主线的 OpenClash 全量版本。v5.4.2: P0-FIX#41 小米白名单。
+# 定位：对齐 Clash Party v5.4.22 JS 主线的 OpenClash 全量版本。v5.4.2: P0-FIX#41 小米白名单。
 #       与同目录 OpenClash(mihomo).sh（Normal）互补：
 #         - Normal 面向稳定版 mihomo / 经典 url-test
 #         - full  面向 4GB+ 路由器 / 需要与 Clash Party 桌面端一致的细粒度分流
@@ -23,7 +23,7 @@
 
 
 
-VERSION_TAG="v5.4.21-oc-smart.1"
+VERSION_TAG="v5.4.22-oc-smart.1"
 CONFIG_FILE="$1"
 LOG_FILE="/tmp/openclash.log"
 
@@ -3268,6 +3268,12 @@ rules:
 - "RULE-SET,miuiprivacy,\U0001F6D1 广告拦截"
 - "RULE-SET,privacy,\U0001F6D1 广告拦截"
 - "RULE-SET,youmengchuangxiang,\U0001F6D1 广告拦截"
+  # v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——YouTube/Google/MS/Apple 白名单豁免，其余海外 QUIC REJECT
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),\U0001F4F9 YouTube"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),\U0001F527 工具与服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,microsoft)),\U24C2️ 微软服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,apple)),\U0001F34E 苹果服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT"
 - DST-PORT,7680,REJECT
 - GEOSITE,private,DIRECT
 - GEOIP,private,DIRECT,no-resolve
@@ -4361,7 +4367,7 @@ cat > "$RUBY_SCRIPT" << 'RUBY_EOF'
 require 'yaml'
 require 'digest'
 
-VERSION = "v5.4.21-oc-smart.1"
+VERSION = "v5.4.22-oc-smart.1"
 
 STATUS_LOG = "/tmp/clash_smart_status.log"
 File.open(STATUS_LOG, 'w') { |f| f.puts "[#{VERSION}] start" }

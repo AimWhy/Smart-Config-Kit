@@ -5,6 +5,10 @@
 
 ---
 
+## v5.4.22-cmfa.1 (2026-05-31)
+
+#1 借鉴 Proxy-override：QUIC 精细化——AND 规则白名单豁免（YouTube/Google/MS/Apple 的 QUIC 走对应业务组）；其余非 CN QUIC REJECT。首次补齐 CMFA 的 QUIC AND 规则（此前缺失）。
+
 ## v5.4.21-cmfa.1 (2026-05-31)
 
 #4 借鉴 Proxy-override：`default-nameserver` 从纯明文 IP 升级为 DoH-over-IP + 1 明文兜底；消除 bootstrap 阶段 DNS 泄漏。

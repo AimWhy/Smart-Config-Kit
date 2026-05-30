@@ -7,6 +7,16 @@
 
 ---
 
+## v5.4.22 / v5.4.22-normal.1 (2026-05-31)
+
+借鉴 Proxy-override 批 C · #1 QUIC 精细化（spec：`docs/2026-05-30-proxy-override-借鉴设计.md`）：
+
+- AND 规则白名单豁免：YouTube/Google/MS/Apple 的 QUIC 流量路由到对应业务组（依赖 sniffer QUIC 嗅探 SNI → GEOSITE/RULE-SET 匹配）
+- 其余非中国 QUIC → REJECT，强制回退 HTTP/2（同 Proxy-override 原版语义）
+- 首次补齐 CMFA + OpenClash×2 的 QUIC AND 规则（此前缺失，与主线不对称）
+- SingBox generator 扩展 QUIC 转换（AND 复合规则 → 6 条首命中 route rule）
+- iOS 四件套引擎限制：block-quic/disable-udp-ports 不支持 AND/NOT 白名单豁免，标注 N/A
+
 ## v5.4.21 / v5.4.21-normal.1 (2026-05-31)
 
 借鉴 Proxy-override 批 D · #4 DoH-over-IP bootstrap（spec：`docs/2026-05-30-proxy-override-借鉴设计.md`）：
