@@ -5,6 +5,144 @@
 
 ---
 
+## v6.0.13-SR.5 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 远程 RULE-SET 增加 `linuxdo.org` 后缀并绑定 `🏠 国内网站`；`linux.do` 保持第 059 受限网站路由。
+
+## v6.0.12-SR.4 (2026-09-01)
+
+- FIX#181-PC：第一个融合 `DIRECT` RULE-SET 增加 `login.nvidia.cn` 精确主机，先于 NVIDIA 下载规则生效；其余 NVIDIA 域名保持原策略。
+
+## v6.0.11-SR.3 (2026-08-22)
+
+- ROUTING：69 个远程融合 RULE-SET 重放后，Gemini 与 Accademia Gemini 进入 `🔍 Google 服务`；其余 AI 段及 szkane 顺序不变。
+
+## v6.0.10-SR.3 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：`drpf-g10.proxima.nie.netease.com` 与 `sigma-performance-g10.proxima.nie.netease.com` 位于第一个融合 `DIRECT` RULE-SET，不再落入用户可改为代理的“国内游戏”策略组。
+- GUARD：仅精确主机直连，保留 `proxima.nie.netease.com` 父域既有的 anti-AD 处理。
+
+## v6.0.9-SR.2 (2026-08-02)
+
+- FIX-NODE-ISO-LOWERCASE：11 个地区及家宽 policy-regex-filter 在原有大写匹配旁新增“小写 ISO 两位码紧接编号”分支；yun hk01、yun us01、yun jp01、yun sg01、yun tw01 及其家宽变体可进入对应组。
+- GUARD/VERIFY：普通小写短词不扩宽为地区码；跨客户端合同逐一验证 12 个命名样例的主组、聚合组、家宽组及无编号短词保护。
+
+## v6.0.9-SR.1 (2026-07-19)
+
+- 新增通用 GitHub API 工具组融合段，位于上游广义 AI 规则之前；iOS 无 Windows 进程匹配，使用通用回退。
+
+## v6.0.8-SR.1 (2026-07-15)
+
+- 65 个融合 RULE-SET 同步国内权威优先级，并以发布版本缓存键加载自托管资产。
+
+## v6.0.7-SR.1 (2026-07-14)
+
+- FIX#176：iOS 融合文本引用顺序更新，国内域名段位于通用国际 CDN / GeoIP fallback 之前；新增后置 fallback 文本资产后总数为 65。
+
+## v6.0.6-SR.1 (2026-07-14)
+
+- PLATFORM：Windows 的 `WorkPro.exe` / `WorkProWebProcess.exe` 进程直连由桌面 Mihomo、sing-box 与 Xray 产物承载；Shadowrocket iOS 不伪造不支持的 `PROCESS-NAME` 规则，继续消费同步后的融合文本资产。
+
+## v6.0.5-SR.1 (2026-07-14)
+
+- PLATFORM：WorkPro.exe 的 Windows 桌面直连由源图回归契约保护；Shadowrocket iOS 路径不伪造 PROCESS-NAME 规则。
+
+## v6.0.4-SR.1 (2026-07-13)
+
+- DIRECT-ITWDB：默认 `DIRECT` 融合文本段新增 `DOMAIN-SUFFIX,itwdb.com`，Shadowrocket 同步覆盖 WorkPro 及全部子域名。
+
+## v6.0.3-SR.1 (2026-07-12)
+
+- SYNC：移动端文本目标同步为 64 个非空融合 RULE-SET；所有 URL 仍只指向仓库生成资产，不直接调用上游规则集。
+- AI-PRECEDENCE：ChatGPT/OpenAI 主域、oaistatic、Cloudflare NEL 与必要 Sentry/DataDog telemetry 在广告和国外网站段之前进入 `🤖 AI 服务`。
+- SEMANTICS：文本规则沿源图顺序保留；Mihomo MRS grammar 修复不把 keyword/regex 错误扩展为 wildcard。
+
+## v6.0.2-SR.1 (2026-07-10)
+
+- FIX#175：远程规则从 71 个放大分片收敛为 63 个移动端非空融合段；聚合体积由约 75.44 MiB 降至 16.06 MiB，文本规则由约 310 万条降至 575,499 条。
+- ROOT-CAUSE：修复 HaGeZi Ultimate 被错误替换为完整 TIF，以及 249 条国家 GEOIP 被展开成 76 万以上 CIDR 的双重放大；国家 GEOIP 现在保留为 SR 原生规则，服务型 GEOIP 才转换为 CIDR。
+- DEDUP：每个同策略段删除精确重复、被 DOMAIN-SUFFIX / DOMAIN-KEYWORD 覆盖的域名和被父网段覆盖的 CIDR；最终 Clash 文本二次优化删除数为 0。
+- BUDGET：新增 32 MiB / 100 万条客户端聚合门禁，并继续保留 18 MiB 单资产门禁，防止以后通过增加分片数掩盖总量回归。
+
+## v6.0.1-SR.1 (2026-07-10)
+
+- FIX#174：`scki-fused-005-ad` 从单个 51.10 MiB RULE-SET 拆为 3 个同策略、有序分片；`scki-fused-057-intl-site` 从 20.15 MiB 拆为 2 个同策略、有序分片，避免 CDN / Shadowrocket 对超限单文件返回 `403/forbidden`。
+- SEMANTICS：5 个分片仍按原分流位置连续匹配，策略目标分别保持 `🛑 广告拦截` 和 `🌐 国外网站`；规则内容、策略组和最终匹配优先级不变。
+- VERIFY：生成时每个远程文本资产限制为 18 MiB，且合同校验会扫描本配置实际引用 URL 的文件存在性和字节数。
+
+## v6.0.0-SR.1 (2026-07-09)
+
+- FUSED-RULESETS：迁移到 68 个融合远程 RULE-SET。
+- META：跟随 Clash Party v6.0.0 更新版本元数据；策略组保持不变。
+
+## v5.4.39-SR.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Shadowrocket 不支持 Mihomo `.mrs` rule-provider；规则语义延续 v5.4.38-SR.1。
+
+## v5.4.38-SR.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：删除零星本地白名单直写，改为 13 个仓库维护的 supplemental `RULE-SET`。
+- SYNC：版本元数据同步 Clash Party v5.4.38。
+
+## v5.4.37-SR.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Shadowrocket `.conf` 不支持 Mihomo `nameserver-policy` / `geosite:*` DNS policy 字段；现有 `dns-server` / `fallback-dns-server` 语义不变。
+
+## v5.4.36-SR.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：同步删除 22 条经逐条确认的冗余 `DOMAIN` / `DOMAIN-SUFFIX` 规则，远程规则集保持不变。
+- AI / Binance / Microsoft login 候选因不同策略 `.mrs` 前置阻断，继续保留。
+
+## v5.4.35-SR.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：删除 5 个已被前序同目标规则覆盖的远程 RULE-SET：Marketing、EncoreTVB、FindMy、WildRift、AcFun。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置直写规则：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- 远程 RULE-SET 实测数 288 → 283；匹配顺序不变。
+
+## v5.4.34-SR.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 blackmatrix7 Shadowrocket `GaoDe.list`，归入 `🏠 国内网站`。
+- 顺序保持在广告/威胁规则之后、国外网站兜底之前，修复 `webapi.amap.com` 高德 API 误走国外的风险。
+
+## v5.4.33-SR.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：新增 VPSDance Shadowrocket `coding.list`，归入 `🤖 AI 服务`。
+
+## v5.4.32-SR.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：将国内游戏内联规则和 SteamCN 等规则集整体前置到国外游戏 RULE-SET 之前，避免 HoYoverse/Game 宽规则抢先代理。
+- 文件头与 README 对齐 Clash Party v5.4.32。
+
+## v5.4.31-SR.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：新增抖音 Web 国内流媒体前置规则，`douyin.com` / `zjcdn.com` 等域名先于 TikTok 和国外规则集命中 `📺 国内流媒体`。
+- 文件头与 README 对齐 Clash Party v5.4.31。
+
+## v5.4.30-SR.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `🔍 Google 服务` 策略组，位于 `🔧 工具与服务` 之前。
+- `GoogleSearch` / `GoogleDrive` / `GoogleEarth` / `Google` / `Scholar` 规则集改投新组；工具组保留非 Google 搜索和开发者服务。
+
+## v5.4.29-SR.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：22 个区域 `url-test` 组 `interval=180 -> interval=300`，降低订阅节点测速频率。
+- 规则与策略组语义不变；FINAL 仍走 `🐟 漏网之鱼`。
+- README 与文件头对齐 Clash Party v5.4.29。
+
+## v5.4.27-SR.1 (2026-06-07)
+
+- ★ CLEAN#165：同步清理 7 条已由前置远程规则集覆盖的本地直写域名（Claude / PayPal / HBO / Hulu / Xbox）；删除后仍命中同策略组。
+
+## v5.4.26-SR.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞——szkane `AiDomain.list` 的 `DOMAIN-KEYWORD,copilot` 子串会把它误吞到 `🤖 AI 服务`（国外代理）导致对话报错；在 szkane AiDomain RULE-SET 之前前置 `DOMAIN-SUFFIX,copilot.tencent.com,🏠 国内网站`（与既有 RustDesk 防吞守卫并置）。基线 Clash Party v5.4.26。
+
+## v5.4.25-SR.1 (2026-06-04)
+
+- ★ SYNC：产物头部版本和基线声明对齐 Clash Party v5.4.25；规则语义延续 v5.4.23-SR.2，无新增 SR 专属规则变更。
+
 ## v5.4.23-SR.2 (2026-06-02)
 
 - ★ FIX#162：修复 Shadowrocket 远程规则列表加载 `Invalid status`：

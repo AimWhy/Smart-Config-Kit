@@ -1,6 +1,7 @@
 # OpenClash 使用说明（Smart / Normal 双版本）
 
 > 目录简介：这里提供 OpenWrt OpenClash 的 Smart/Normal 覆写脚本、UI 配置快照和部署排障说明。
+> 当前版本：**v6.0.13-oc-normal.7 / v6.0.13-oc-smart.7**（Build 2026-09-03，跟随 Clash Party v6.0.13；融合规则缓存按发布版本隔离）。
 >
 > 本目录提供「同规则量、不同内核能力」的两份覆写脚本，外加一份 OpenClash UI 配置快照（`.conf`）。
 >
@@ -8,7 +9,10 @@
 > - Normal 版：`OpenClash(mihomo).sh`（`type: url-test`，非 Smart 内核）
 > - UI 配置快照：`OpenClash(mihomo).conf`（一次性导入推荐 UCI 选项）
 > - `PROCESS-NAME` 清单已语法同步；RustDesk 进程改走 `🧑‍💼 会议协作`，路由器端通常看不到局域网客户端进程名，主要用于保持 mihomo 规则形态一致。
-> - v5.4.17 起 DNS 固定为 split-bootstrap：`default-nameserver` 纯 IP，其它 resolver 全部 DoH，并开启 `respect-rules: true`、关闭 `prefer-h3`；v5.4.16 起 `paddle.com` 前置命中 `🏦 金融支付`，覆盖 anti-AD 对 `analytics.paddle.com` 的误拦截；v5.4.15 起新增 GEOSITE 覆盖台账与 anti-ad 误伤白名单模块化说明；v5.4.14 起 `cloudflarestorage.com` 前置命中 `🌐 国外网站`，覆盖上游 phishing 规则源误拦截；v5.4.13 起在 `fake-ip-filter` 中让 STUN/TURN 与 RustDesk 域名返回真实 IP；标准 STUN/TURN 端口直连，UDP/443 TURN 仍受 QUIC 屏蔽策略控制。
+> - `PROCESS-NAME` 清单已语法同步；RustDesk 进程改走 `🧑‍💼 会议协作`，路由器端通常看不到局域网客户端进程名，主要用于保持 mihomo 规则形态一致。
+> - 私有节点 DNS：Ruby 覆写默认采用 `adaptive` 模式；`off / policy / adaptive` 仅控制活动节点 FQDN 的 resolver、精确 policy 与 bootstrap hosts 投影，不会让机场订阅覆盖路由器的全局业务 DNS。若使用 LuCI 的 DNS 覆写/Mixin，需合并这些字段。详见 [私有节点 DNS 指南](../docs/private-node-dns.md)。
+
+> - 节点命名兼容：yun hk01 / yun us01 / yun jp01 / yun sg01 / yun tw01 等小写 ISO 两位码加编号可正常进入区域组；不会把普通文本小写词误作国家码。
 
 <sub>💖 [支持本项目](../docs/donate.md) · ⭐ [Star](https://github.com/ivansolis1989/Smart-Config-Kit) · 🐛 [Issue](https://github.com/ivansolis1989/Smart-Config-Kit/issues)</sub>
 
@@ -33,8 +37,8 @@
 | 适用内核 | Mihomo Smart / Meta Alpha | Mihomo Meta 稳定内核（非 Smart） |
 | 区域组类型 | `type: smart` | `type: url-test` |
 | LightGBM | 支持（`uselightgbm: true`） | 不支持 |
-| 规则覆盖 | 385 providers / ~990 rules | 385 providers / ~990 rules |
-| 业务组数量 | 32 | 32 |
+| 规则覆盖 | 376 providers / 1020+ rules | 376 providers / 1020+ rules |
+| 业务组数量 | 33 | 33 |
 | 区域组数量 | 22 | 22 |
 | DNS / Sniffer / Rule-Providers | 完全一致 | 完全一致 |
 
@@ -231,14 +235,14 @@ LuCI → **配置订阅** → 添加订阅链接 → 下载 → **全局设置**
 
 ### 3.7 启动后验证
 - OpenClash「运行状态」应显示内核正常启动，日志没有大面积 rule-provider 403 / 404。
-- 策略组页面应看到 22 区域组 + 32 业务组；Smart 版区域组应为 `smart`，Normal 版应为 `url-test`。
+- 策略组页面应看到 22 区域组 + 33 业务组；Smart 版区域组应为 `smart`，Normal 版应为 `url-test`。
 - 额外检查：按根 README 的 [导入后 60 秒验证清单](../README.md#-导入后-60-秒验证清单) 确认规则下载、GEOSITE 命中与 anti-ad 误伤白名单。
 
 ## 4. 常见问题
 
 ### Q1：我现在不是 Smart 内核，还能用这套规则吗？
 
-可以。直接用 `OpenClash(mihomo).sh` 即可，规则覆盖（385 providers / ~990 rules）与 Smart 版完全一致。
+可以。直接用 `OpenClash(mihomo).sh` 即可，规则覆盖（376 providers / 1020+ rules）与 Smart 版完全一致。
 
 ### Q2：我后面升级到 Smart 内核，要重做配置吗？
 

@@ -1,13 +1,227 @@
 # Clash Party — 变更日志
 
-> 本文件是 `Clash Party/ClashParty(mihomo-smart).js` 的完整变更日志。
-> 本 JS 覆写脚本是仓库的**主线基线**，其它所有产物（CMFA YAML / OpenClash Normal+Smart / Shadowrocket / SingBox / Surge / Loon / Quantumult X / v2rayN）跟随本版本。
+> 本文件记录 Clash Party JS 覆写脚本变更。
+> 规则权威源已迁移到 `rulesets/source/routing-graph.js`；Clash Party 是消费最终融合规则集的客户端产物。
 >
-> 主版本号 `v5.3.X`；主版本变更必须同步传递到所有 9 份产物的子版本号。
+> 主版本变更必须同步传递到所有受影响产物的子版本号。
 
 ---
 
-## v5.4.25 / v5.4.25-normal.1 (2026-06-03)
+## v6.0.13-dns.6 / v6.0.13-normal.7 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：`linuxdo.org`、`connect.linuxdo.org` 与 `invite.linuxdo.org` 首命中固定为 `scki-fused-013-cn-site-domain → 🏠 国内网站`。
+- GUARD：`linux.do` 继续命中 `scki-fused-059-gfw-domain → 🚫 受限网站`；第 013 域名段保持在通用国际 IP 兜底之前。
+
+## v6.0.12-dns.5 / v6.0.12-normal.6 (2026-09-01)
+
+- FIX#181-PC：`login.nvidia.cn` 进入首段 `scki-adfp-direct`，在 NVIDIA 下载宽规则之前精确命中 `DIRECT`。
+- SCOPE：不把海外代理整体判为故障；仅绕开 Smart 对目标站点 TLS 兼容性不可见的择路盲点，其余 NVIDIA 域名仍走 `📥 下载更新`。
+
+## 2026-08-31 FlClash 平台说明联动
+
+- FIX#181：FlClash 子版本 `v6.0.11-flclash.7` 修正其应用层 DNS 覆盖与 Android VPN HTTP 代理说明。Clash Party 没有 FlClash 的后置 `overrideDns` 开关；本次不改 Clash Party 产物、规则源或 DNS 算法。详见 [FlClash 变更日志](../FlClash/CHANGELOG.md)。
+
+## v6.0.11-dns.4 / v6.0.11-normal.5 (2026-08-22)
+
+- ROUTING：仅 `gemini` 与 `acc-gemini` 融合段改为 `🔍 Google 服务`；`szkane-ai` 仍为 `🤖 AI 服务`，且保持原有相对顺序。
+- VERIFY：Gemini、Generative Language、Google APIs 与 DeepMind 首命中固定为 Google；`cerebras.ai` 保持 AI，`static.doubleclick.net` 保持广告优先。
+
+## v6.0.10-dns.4 / v6.0.10-normal.5 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：两个网易游戏服务主机加入首段 `scki-adfp-direct` 融合规则集，精确 `DIRECT` 优先于 anti-AD 与 `netease.com` 国内游戏宽规则。
+- GUARD：只加入报告中的两条 `DOMAIN`，不对 `proxima.nie.netease.com` 父域做宽泛白名单；回归固定验证两个主机的首命中均为 `scki-fused-001-direct-domain`。
+
+## v6.0.9-dns.3 / v6.0.9-normal.4 (2026-08-02)
+
+- FIX-NODE-ISO-LOWERCASE：classifyAllNodes 新增“ISO 两位码 + 编号”专用、大小写无关匹配；yun hk01 / yun us01 / yun jp01 / yun sg01 / yun tw01 会分别进入对应地区主组与聚合组。
+- GUARD：原有严格的 ISO word-boundary 匹配保持不变；不会把任意自然语言小写 us / in 扩大为国家码命中，只有后续存在编号时才启用兼容分支。
+- VERIFY：覆写合同固定回归用户提供的 12 个节点名，并验证分类桶、区域主组和聚合组成员关系。
+
+## v6.0.9-dns.2 / v6.0.9-normal.3 (2026-07-25)
+
+- ADAPTER：Node-DNS 从脚本内隐式 helper 收敛为 `SckiSubscriptionAdapter.captureNodeDns()` / `applyNodeDns()`；Adapter 自己提供活动节点 server 列表和日志，runtime Module 不再依赖节点分类器、`VERSION` 或 UI 日志函数。
+- PROFILE：同步 `off / policy / adaptive` 受信任 profile，默认 `adaptive`；profile 只决定私有节点 DNS 投影深度，绝不改变 55 组、规则、provider 或仓库全局 DNS。snapshot 与 apply profile 不匹配、缺少 PSS baseline 时均零写入。
+- HARDENING：有界地保留后置/大小写不同的活动节点精确 policy；wildcard 仍受独立上限。resolver URL path/query 按大小写区分，冲突 fail-closed，policy 与 resolver bootstrap hosts 原子接受。
+- VERIFY/DOCS：三份 JS 合同覆盖三档 profile、路径大小写冲突、后置精确 key、profile-mismatch、64+ resolver/hosts 容量及同步漂移；复核 Mihomo DNS 官方页面（2026-07-18 更新），字段兼容无变化。
+
+## v6.0.9-dns.1 / v6.0.9-normal.2 (2026-07-25)
+
+- NODE-DNS：订阅中的私有 resolver 不再加入全局 `proxy-server-nameserver`。仅为活动代理节点 FQDN 物化精确 node policy；订阅 PSS 只作为无更具体 policy 时的节点级回退。
+- HARDENING：保留 `hosts` 的标量域名重定向，支持 IPv4 / IPv6 / IPv4-mapped IPv6 bootstrap；`*.` 先于 `+.` / `.`，resolver hosts 优先于节点 hosts，所有不受信输入和容量都有上限。
+- VERIFY：三份 JS 覆写共享 `tools/runtime/node-dns-hints.js`，合同覆盖 wildcard、私有 resolver 作用域、IP bootstrap、64 条容量边界和重复覆写幂等性。
+
+## v6.0.9 / v6.0.9-normal.1 (2026-07-19)
+
+- FIX#176 后续审计：通用 `api.github.com` 融合进 `🔧 工具与服务` 并置于上游广义 AI 规则之前；仅 `Code Helper` / `Code Helper (Plugin)` 的进程加域名组合继续命中 `🤖 AI 服务`。
+
+## v6.0.8 / v6.0.8-normal.1 (2026-07-15)
+
+- FIX#176 全量修复：Smart / Normal 把共享边缘/CDN、`geolocation-!cn`、IP 与地域兜底统一放到国内权威段之后，不再依赖针对单个域名的快照迁移。
+- CACHE-ISOLATION：所有融合 provider 的远程 URL 与本地 Mihomo `path` 均按 `v6.0.8` 隔离，配置更新会建立新缓存文件而非等待旧路径的更新周期。
+
+## v6.0.7 / v6.0.7-normal.1 (2026-07-14)
+
+- FIX#176：Smart / Normal 的最终融合规则将 `scki-fused-061-cn-site` 放在通用国际 CDN / GEOIP fallback 前；`mi.com`、`yunxuetang.cn`、`yxt.com` 等国内域名不会因解析到境外 IP 被提前代理。
+- REGRESSION：覆写契约以语义段而非固定编号验证 CN 域名段在所有通用 Cloudflare / CloudFront / Fastly、国家及非中国地域兜底之前。
+
+## v6.0.6 / v6.0.6-normal.1 (2026-07-14)
+
+- TUN-DIRECT-WORKPRO：`WorkPro.exe` 与 `WorkProWebProcess.exe` 固定进入 TUN，再命中 `scki-local-process-direct` 的融合 `DIRECT` residual；两份覆写均移除 WorkPro 的 `tun.exclude-process` 绕过，避免连接直接落到物理网卡。
+- REGRESSION：进程白名单夹具同时覆盖父进程和 Web 子进程，并断言二者都不在 TUN 排除列表。
+
+## v6.0.5 / v6.0.5-normal.1 (2026-07-14)
+
+- DIRECT-WORKPRO：scki-local-process-direct 中既有的 WorkPro.exe 现在由进程白名单夹具强制校验；融合 direct 段仍在 work 段之前，Smart / Normal 固定路由到 DIRECT。
+
+## v6.0.4 / v6.0.4-normal.1 (2026-07-13)
+
+- DIRECT-ITWDB：`itwdb.com` 进入 `scki-local-direct` 补充规则集，经 MRS 与融合编译后保持在默认 `DIRECT` 段；覆盖 `workpro.itwdb.com` 与所有子域名，不在 Smart / Normal 主规则内散写单条域名。
+
+## v6.0.3 / v6.0.3-normal.1 (2026-07-12)
+
+- FIX#FUSED-DOMAIN-PAYLOAD：Smart / Normal 统一消费正确的 fused MRS domain wildcard payload；`chatgpt.com`、`chat.openai.com`、`persistent.oaistatic.com` 不再失配后落入 `🌐 国外网站`。
+- AI-PRECEDENCE：DataDog / Sentry 的 ChatGPT telemetry host 在广告段之前进入 `🤖 AI 服务`，`a.nel.cloudflare.com` 也在 Google 与国外网站之前由 AI 段接管。
+- SYNC：同步为 124 个融合 rule-provider / 141 条主规则（源 513 / 970），不直接调用上游 rule-provider。
+
+## v6.0.2-region.1（Smart 保持 v6.0.2 基线）/ v6.0.2-normal.2 (2026-07-12)
+
+- FIX#REGION-CARRIER-PRIORITY：修复节点名中的运营商/线路营销词抢占真实落地地区的问题。此前 `🇯🇵AWS日本01 | 电信移动联通推荐` 会先命中 `CN` 的 `电信/联通/移动` 关键词，只进入 `🌏 亚太节点`，不会进入 `🇯🇵 日韩节点`。
+- FIX：分类前暂时剥离 `中国电信/联通/移动/铁通`、`电信/联通/移动/铁通`、`China Telecom/Unicom/Mobile` 等非地区标签；随后按完整地区词、国旗和 ISO 代码分类。若节点只含运营商标签且没有任何地区信号，才兜底归为 `CN`。
+- REGRESSION：覆盖日本 AWS + 中文运营商标签、美国 AWS + `China Telecom` 标签和纯运营商标签；三种覆写均断言该日本样例同时进入 `🇯🇵 日韩节点` 与 `🌏 亚太节点`。
+- SCOPE：`rulesets/source/routing-graph.js`、融合 rule-provider、GEO 数据库及其生成产物未改；这是 Clash Party 运行时节点分类层修复。
+
+## v6.0.2 (2026-07-10)
+
+- FIX#175：Smart / Normal 同步消费重新编译的 113 个融合 provider / 130 条主规则；不再继承 HaGeZi 错源和 GEOIP CIDR 放大产物。
+- FUSED-DEDUP：同策略段内的精确重复、后缀/关键词覆盖和父 CIDR 覆盖在编译期消除，最终 JS 仍不携带任何原始上游 provider。
+- GEOIP-NATIVE：运行时 GEOIP 留在 residual provider，由 Mihomo GeoIP 数据库查询；不强制塞进 `.mrs` 或展开为海量 CIDR。
+
+## v6.0.1 (2026-07-10)
+
+- SYNC：规则权威源升级为 `rulesets/source/routing-graph.js v6.0.1`；Smart / Normal 继续只消费最终融合 `.mrs` / residual 规则集，113 个 provider、130 条主规则和 55 个策略组不变。
+- DELIVERY：移动端文本规则集改由融合编译器按 18 MiB 上限生成有序分片；本 JS 产物不重新携带上游 provider，也不回退为直接调用上游规则集。
+- BUILD-IDEMPOTENCE：生成器对 CRLF / LF 的旧 fused 注入调用统一清理，再插入唯一调用；重复构建不会累加 `applyMihomoFusedRuleSets(config)`。
+- VERIFY：全产物合同改为从 fused manifest 验证分片数量和顺序，并在 CI 路径检查所有客户端实际引用的自托管生成文件大小。
+
+## Unreleased (2026-07-09)
+
+- SOURCE-GRAPH：raw provider / raw rules / MRS 映射迁移到 `rulesets/source/routing-graph.js`。
+- APP-SIMPLIFY：Smart 与 Normal JS 覆写脚本只保留节点清洗、区域组、业务组、DNS/全局覆写和最终 `applyMihomoFusedRuleSets(config)` 调用。
+- RULES：最终输出为融合后的 `113` 个 rule-provider 与 `130` 条规则；不改变分流语义。
+
+## v6.0.0 / v6.0.0-normal.1 (2026-07-09)
+
+- FUSED-RULESETS：新增融合规则集编译层；后续权威输入已迁移到 `rulesets/source/routing-graph.js`。
+- SCALE：源 `474 providers / 931 rules` 压缩为 `113` 个融合 provider 与 `130` 条主规则，主规则只保留 `17` 条端口/逻辑组合/兜底等必要内联规则。
+- MIHOMO-MRS：融合 provider 优先输出 `.mrs`，残余不可转条目写入 `*-residual.yaml`。
+- GOVERNANCE：后续零星域名/IP/进程补丁必须进入补充规则集并由融合编译器折叠，不得无必要散写单条规则。
+
+## v5.4.39 / v5.4.39-normal.1 (2026-07-09)
+
+- MRS-PARTIAL：Smart / Normal 全量复查剩余 `YamlRule` / `TextRule`，可迁移部分全部拆入 `.mrs`，只为 `PROCESS-NAME` / `GEOIP` / 端口等不支持类型保留残余 YAML 或原格式。
+- MIHOMO-MRS：规则规模更新为 474 providers、929 条规则；424 个 provider 使用 `.mrs`，30 个 partial provider 追加 `-classical.yaml` 残余规则集。
+- SOURCE-SIZE：`.mrs` 覆写映射表改为压缩 JSON 单行，避免多行兼容表把 Clash Party 源码行数撑大；运行时仍能自动把动态 provider 改写为最终规则集。
+- SCKI-SUPPLEMENTAL：可表达为 domain/ipcidr 的 `scki-*` 补充规则集已迁移到 `.mrs`，进程规则继续保留为必要例外。
+
+## v5.4.38 / v5.4.38-normal.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：新增公共补充规则集常量与 15 个 `scki-*` rule-provider，将零星域名/IP/进程补丁从主 rules 中移出。
+- MIHOMO-MRS：Smart / Normal 迁移为 429 providers、884 条规则；35 个上游 `.mrs` 继续复用，255 个上游 YAML/TEXT 转为本仓库 `.mrs`，38 个混合 classical provider 拆分为 domain/ipcidr 双 `.mrs`。
+- SYNC：补充规则集前置顺序覆盖广告误伤、抖音 Web、RustDesk、Google Workspace、下载更新等场景。
+
+## v5.4.37 / v5.4.37-normal.1 (2026-06-29)
+
+- ★ DNS-POLICY#170：`overwriteGeneral()` 在既有 GitHub / jsdelivr / Fastly CDN policy 之外，新增 geosite 级解析器分流：
+  - `geosite:cn` → AliDNS / DNSPod DoH。
+  - `geosite:geolocation-!cn` → Cloudflare / Google DoH。
+- 目的：`nameserver-policy` 优先于 `nameserver/fallback`，先把国内/非国内域名的 resolver 选路固定下来，避免非国内域名先向国内递归 resolver 查询后再由 `fallback-filter` 纠偏。
+- 文档：`Clash Party/README.md` 的 UI Mixin 示例同步 DoH-over-IP bootstrap、hosts 预解析、geosite policy、`direct-nameserver-follow-policy` 与 Sniffer skip 列表；旧的 31 业务组 / 963 规则 / 373 providers 说明更新为当前 33 业务组 / 1000+ 规则 / 376 providers。
+- 验证：`tools/validate-js-overwrites.js` 新增 geosite policy 断言，防止后续 DNS policy 回退。
+
+## v5.4.36 / v5.4.36-normal.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：删除 22 条经逐条确认的冗余直写规则：`video.unext.jp` / `dl.delivery.mp.microsoft.com` 两条为本地前序覆盖，另 20 条为 provider 前序同策略覆盖。
+- 已删除候选：`stripe.com` / `stripe.network` / `stripecdn.com` / `stripe.dev`、`outlook.office365.com`、`notion.so` / `notion.site` / `atlassian.com` / `trello.com` / `bitbucket.org`、`channel4.com` / `channel5.com` / `sky.com`、`yandex.com` / `yandex.ru` / `pypi.org` / `pythonhosted.org`、`download.mozilla.org` / `archive.mozilla.org` / `releases.ubuntu.com`。
+- 已保留候选：AI 7 条、Binance 3 条、Microsoft login 2 条；保留原因是同目标证明之前存在不同策略 `.mrs` 规则集。
+- 规则数量从 1023 降到 1001，provider 保持 376。
+
+## v5.4.35 / v5.4.35-normal.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：删除 8 个已被前序同目标规则覆盖的冗余上游规则集：`marketing`、`acc-vf-paypal`、`encoretvb`、`findmy`、`wildrift`、`acfun`、`acc-fl-douyin`、`acc-fl-xiaohongshu`。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置直写规则：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- Provider 生成同步缩减：`VirtualFinance` 由 4 个降为 3 个（移除 PayPal 补充源），`FakeLocation` 由 10 个降为 8 个（移除 DouYin / XiaoHongShu 补充源）。
+- 验证：全量 provider 数 384 → 376；匹配顺序不变，`privacy` 保留。
+
+## v5.4.34 / v5.4.34-normal.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 MetaCubeX `amap` rule-provider，并在广告/威胁规则之后、TikTok/GFW/geolocation-!cn 宽规则之前加入 `RULE-SET,amap,🏠 国内网站`。
+- 覆盖重点：`webapi.amap.com`、`amap.com`、`autonavi.com`、`gaode.com` 等高德地图 / AMap 国内 API 不再依赖尾部 `RULE-SET,cn` 才直连。
+- 验证：`tools/validate-js-overwrites.js` 新增 provider 存在与顺序断言，防止后续把 AMap 守卫挪到国外兜底之后。
+
+## v5.4.33 / v5.4.33-normal.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：新增 `vpsdance-ai-coding` rule-provider，来源为 `VPSDance/ai-proxy-rules` 的 `rules/clash/coding.yaml`。
+- 覆盖重点：Codex / Claude Code / Cursor / Zed / Windsurf / Replit / Sourcegraph / Amazon Q / Augment / Lovable / Bolt 等 AI 编程工具；规则仍命中现有 `🤖 AI 服务`，不新增策略组。
+- 保留 v5.4.32 的国内游戏优先级修复顺序。
+
+## v5.4.32 / v5.4.32-normal.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：将 `🕹️ 国内游戏` 块提升到 `🎮 国外游戏` 块之前，确保 `yuanshen.com` / `mihoyo.com` / 网易 / WeGame / SteamCN 等国内游戏域名先于 `RULE-SET,hoyoverse`、`RULE-SET,game`、`GEOSITE,category-games` 命中直连策略。
+- 覆盖样例：`www.yuanshen.com`、`api-takumi.mihoyo.com`、`game.163.com`。
+- FlClash 同步同构修复；新增 JS 覆写回归断言防止后续顺序回退。
+
+## v5.4.31 / v5.4.31-normal.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：新增抖音 Web 国内流媒体前置守卫，`douyin.com` / `zjcdn.com` 等视频 CDN 域名在 TikTok、广告和国外兜底规则前命中 `📺 国内流媒体`。
+- 覆盖样例：`www.douyin.com`、`v5-dy-o.zjcdn.com`、`v5-dy-ov-experiment.zjcdn.com`。
+- FlClash 同步同构修复；新增 JS 覆写回归断言防止后续顺序回退。
+
+## v5.4.30 / v5.4.30-normal.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `🔍 Google 服务` 业务组，位于 `🔧 工具与服务` 之前，语义为从工具组拆出的独立平台服务。
+- Google 基础服务、`RULE-SET,scholar`、`RULE-SET,google`、`RULE-SET,google-ip`、`GEOIP,google` 与 Google QUIC 规则改投 `🔍 Google 服务`。
+- `🔧 工具与服务` 保留 Bing / Yandex / GitHub / Docker / GitLab / Python / developer 等非 Google 搜索和开发者服务。
+
+## v5.4.29 / v5.4.29-normal.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：区域自动测速间隔统一到 300s。
+  - Smart 主线：22 个 `type: smart` 区域组 `interval: 120 -> 300`，减少 LightGBM/健康检查触发频率。
+  - Normal 版：22 个 `type: url-test` 区域组 `interval: 180 -> 300`，与 CMFA/OpenClash/iOS 端对齐。
+- FINAL 兜底策略保持 `🐟 漏网之鱼`，不改为 DIRECT；本轮只处理 issue #165 的测速频率问题。
+
+## v5.4.28 / v5.4.28-normal.1 (2026-06-07)
+
+- ★ CLEAN#165 P2：大规模清理已被上游同策略规则集覆盖的流媒体/游戏直写域名（-38 行，6 段）：
+  - **🇭🇰 香港流媒体** (4): `mytvsuper.com`/`nowe.com`/`rthk.hk`/`cabletv.com.hk` → 各对应 RULE-SET
+  - **🇹🇼 台湾流媒体** (5): `litv.tv`/`friday.tw`/`linetv.tw`/`hamivideo.hinet.net` → 各对应 RULE-SET
+  - **🇯🇵 日韩流媒体** (6): `tver.jp`/`dmm.com`/`dmm.co.jp`/`nicovideo.jp`/`nicovideo.me`/`dmc.nico` → 各对应 RULE-SET
+  - **🇪🇺 欧洲流媒体** (3): `itv.com`/`itvstatic.com`/`britbox.com` → 各对应 RULE-SET
+  - **🌐 其他国外流媒体** (6): `wetv.vip`/`wetvinfo.com`/`viki.com`/`viki.io`/`mewatch.sg`/`discoveryplus.com` → 各对应 RULE-SET
+  - **🎮 国外游戏** (12): `ubisoft.com`/`ubi.com`/`riotgames.com`/`leagueoflegends.com`/`valorant.com`/`rockstargames.com`/`gog.com`/`gogalaxy.com`/`supercell.com`/`garena.com`/`hoyoverse.com`/`hoyolab.com` → 各对应 RULE-SET
+- **审计排除**：`viu.com/.tv`（RULE-SET,viu 目标 STREAM_OTHER ≠ 直写 STREAM_HK）、`appletv.com`（RULE-SET,appletv 目标 APPLE ≠ 直写 STREAM_OTHER）、163/126/126.net（geosite:cn 为宽泛 geo 规则集，非服务专属 RULE-SET，语义不同），以上均保留直写。
+- **跨产物联动**：FlClash JS / CMFA YAML / OpenClash Normal+Smart / Shadowrocket / Surge / Loon / Quantumult X 同步清理（SingBox 为生成产物需修改生成器，本轮豁免；v2rayN 无此冗余；Passwall/Passwall2 规则语法不同，不适用）。
+- **规则数变动**：Clash Party ~1020 → ~982；CMFA ~1400+ → ~1360+；Shadowrocket ~1200+ → ~1160+；QX [filter_local] 568 → 513
+
+## v5.4.27 / v5.4.27-normal.1 (2026-06-07)
+
+- ★ CLEAN#165 P1：清理已被上游同策略规则集覆盖的 7 条直写域名：
+  - `anthropic.com` → `RULE-SET,claude`
+  - `braintreegateway.com` / `venmo.com` → `RULE-SET,paypal`
+  - `max.com` → `RULE-SET,hbo`
+  - `hulu.jp` / `happyon.jp` → `RULE-SET,hulu`
+  - `bethesda.net` → `RULE-SET,xbox`
+- 审计边界：`archive.org` 虽与上游重叠，但删除后首个命中会变成其他策略，保留；`video.unext.jp` 仅被本地 `unext.jp` 覆盖，不属于上游规则集重复，本轮保留。
+
+## v5.4.26 / v5.4.26-normal.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy/智能助手 `copilot.tencent.com` 国内直连防吞（issue [#164](https://github.com/IvanSolis1989/Smart-Config-Kit/issues/164)）
+  - **根因**：szkane `AiDomain.list` 含 `DOMAIN-KEYWORD,copilot`（子串匹配），`copilot.tencent.com` 含 "copilot" 子串被 `RULE-SET,szkane-ai` 误吞到 `🤖 AI 服务`（国外代理）；该 AI rule-set 在 `RULE-SET,cn`（国内）之前 → WorkBuddy 对话报错，关闭系统代理即恢复。
+  - **修复**：在所有 AI rule-set 之前前置 `DOMAIN-SUFFIX,copilot.tencent.com,🏠 国内网站`（与既有 `deepseek.com → 国内网站` 国内 AI 惯例一致；置于段首以防任何宽规则抢匹配）。
+  - **回归守卫**：`tools/validate-js-overwrites.js` 新增断言——guard 存在且排在 `RULE-SET,szkane-ai` 之前（覆盖 Smart/Normal/FlClash 三个 JS 产物）。
+  - **同构核查**（CLAUDE.md §1）：blackmatrix7 `Copilot.list` / Accademia `Copilot.yaml` 经核实均无 copilot 子串关键词（仅精确域名 `copilot.microsoft.com`），不会误伤；唯一元凶是 szkane AiDomain.list。
+  - **全产物联动**：CMFA / OpenClash Normal+Smart / Shadowrocket / Surge / Loon / Quantumult X / FlClash 同步前置防吞规则；SingBox / v2rayN / Passwall / Passwall2 经核实不受影响（`geosite:copilot`/`geosite:openai` 均无 copilot 子串关键词，`copilot.tencent.com` 顺流到 `geosite:cn`（含 `+.tencent.com`）→ 国内直连），仅对齐版本号。
+
+## v5.4.25 / v5.4.25-normal.1 (2026-06-04)
 
 - ★ 审查修复：GEOIP 重复规则去重（`GEOIP,netflix` / `GEOIP,google` 各出现 2 次 → 保留 GEOIP 标签路由集中区块，删除散落在业务区块的冗余；延续 v5.4.24 GEOIP,ID 清理）
 - ★ 审查修复：Accademia GeoRouting 34 providers（Domain×17 + IP×17）interval 从 `nextInterval()`（~24h）提升到 7 天（604800s）——区域路由规则变化极慢，减少并发刷新频率

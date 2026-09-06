@@ -7,9 +7,176 @@
 
 ---
 
-## v5.4.25-oc-normal.1 / v5.4.25-oc-smart.1 (2026-06-03)
+## v6.0.13-oc-normal.7 / v6.0.13-oc-smart.7 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：Normal 与 Smart 同步第 013 融合域名资产，`linuxdo.org` 及子域进入 `🏠 国内网站`。
+- GUARD：主站 `linux.do` 继续由第 059 GFW 段接管；其余融合段沿用 v6.0.12 固定载荷。
+
+## v6.0.12-oc-normal.6 / v6.0.12-oc-smart.6 (2026-09-01)
+
+- FIX#181-PC：Normal 与 Smart 同步 `login.nvidia.cn` 的首段精确直连资产，优先于 NVIDIA 下载宽规则。
+- SCOPE：只处理中国账号登录主机，不改变其他 NVIDIA 域名的下载组策略。
+
+## v6.0.11-oc-normal.5 / v6.0.11-oc-smart.5 (2026-08-22)
+
+- ROUTING：Normal 与 Smart 同步 Gemini / Accademia Gemini 的 Google 融合段；`szkane-ai` 仍按原顺序走 AI。
+- SYNC：升级为 132 个融合 provider / 151 条规则，发布缓存键为 `v6.0.11`。
+
+## v6.0.10-oc-normal.5 / v6.0.10-oc-smart.5 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：Normal 与 Smart 同步首段融合直连资产；两个网易游戏服务主机在 anti-AD 和 `netease.com` 国内游戏宽规则之前固定直连。
+
+## v6.0.9-oc-normal.4 / v6.0.9-oc-smart.4 (2026-08-02)
+
+- FIX-NODE-ISO-LOWERCASE：Ruby 分类器在字母与数字交界处做受限规范化，解决 Ruby 单词边界把数字视为单词字符、导致 hk01 不命中的问题；用户提供的 12 个小写 ISO 编号节点均进入预期区域。
+- GUARD/VERIFY：保留原 REGIONS 国家正则及其大小写无关语义；合同从两份真实 heredoc 提取分类器，以 Ruby 执行样例回归。
+
+## v6.0.9-oc-normal.3 / v6.0.9-oc-smart.3 (2026-07-25)
+
+- PROFILE：shell 只从受信任本地环境读取并白名单化 `off / policy / adaptive`，再传入 Ruby Adapter；profile 从不读取机场 YAML，且不改变规则、策略组或路由器全局 DNS 基线。
+- ADAPTER-HARDENING：Ruby Module 改为 capture/apply seam，profile mismatch / 缺 PSS baseline 零写入；有界保留后置、大小写不同的活动节点精确 policy，resolver path/query 冲突 fail-closed，并保证接受 policy 所需 bootstrap hosts 一并保留。
+- VERIFY/DOCS：真实 heredoc 合同覆盖三档 profile、大小写精确 key、13 个独立 resolver bootstrap、profile-mismatch 与零写入；复核 OpenClash v0.47.133（2026-07-18），未见覆写入口或 UCI 键 breaking change。
+
+## v6.0.9-oc-normal.2 / v6.0.9-oc-smart.2 (2026-07-25)
+
+- NODE-DNS：两份 Ruby 覆写均在读取订阅、写入固定 DNS 基线后，仅投影活动节点 FQDN 的私有 resolver policy 与 bootstrap hosts；源 PSS 不再成为全局默认节点 DNS。
+- HARDENING：保留 Mihomo scalar hosts redirect，支持 IPv4 / IPv6 / IPv4-mapped IPv6，`*.` 优先于 `+.` / `.`，并在 64 条 hosts 上限前保留 resolver bootstrap。
+- VERIFY：新增真实 heredoc Ruby 合同，覆盖 policy 作用域、通配符、私有 resolver、输出上限、幂等性和日志脱敏。
+
+## 文档维护 (2026-07-16)
+
+- MAINT#AGENTS-SINGLE-SOURCE：Normal / Smart 文件头统一指向根目录唯一维护契约 `AGENTS.md`，并明确源规则图优先；仅修改注释，不改变脚本运行时、规则内容或版本号。
+
+## v6.0.9-oc-normal.1 / v6.0.9-oc-smart.1 (2026-07-19)
+
+- 同步 `api.github.com` 的通用工具组融合段；路由器环境无桌面进程身份，因此不伪造 Copilot 进程例外。
+
+## v6.0.8-oc-normal.1 / v6.0.8-oc-smart.1 (2026-07-15)
+
+- Normal / Smart 同步国内权威优先级，并使用版本化融合 provider URL 与本地缓存路径。
+
+## v6.0.7-oc-normal.1 / v6.0.7-oc-smart.1 (2026-07-14)
+
+- FIX#176：Normal / Smart heredoc YAML 同步使用国内域名优先、通用国际 CDN / GeoIP 后置的融合顺序；路由器端不依赖 DNS 归属猜测，直接遵守源图首匹配优先级。
+
+## v6.0.6-oc-normal.1 / v6.0.6-oc-smart.1 (2026-07-14)
+
+- SYNC：Normal / Smart heredoc YAML 已按同一融合链重建。`PROCESS-NAME` 补丁仍是 Windows 桌面能力，路由器无法看到 LAN 客户端的 WorkPro 父进程或 Web 子进程，保持明确平台豁免。
+
+## v6.0.5-oc-normal.1 / v6.0.5-oc-smart.1 (2026-07-14)
+
+- DIRECT-WORKPRO：两份 heredoc YAML 跟随 source graph 的永久直连契约消费同一 fused direct residual；路由器端不能识别局域网客户端进程名，保持平台例外。
+
+## v6.0.4-oc-normal.1 / v6.0.4-oc-smart.1 (2026-07-13)
+
+- DIRECT-ITWDB：Normal / Smart heredoc YAML 同步默认 `DIRECT` 融合 MRS，`itwdb.com` 与 `workpro.itwdb.com` 不再依赖零散内联规则。
+
+## v6.0.3-oc-normal.1 / v6.0.3-oc-smart.1 (2026-07-12)
+
+- SYNC：Normal / Smart 统一升级到 Clash Party v6.0.3，消费 124 个融合 provider 与 141 条规则。
+- FIX#FUSED-DOMAIN-PAYLOAD：两份 heredoc YAML 同步正确的 MRS domain wildcard 与 classical residual 分层，ChatGPT/OpenAI 不再落入国外网站尾段。
+
+## v6.0.2-oc-normal.1 / v6.0.2-oc-smart.1 (2026-07-10)
+
+- SYNC：Normal / Smart 同步到 Clash Party v6.0.2，使用 113 个融合 provider、130 条规则和 55 个策略组。
+- PERF：`.mrs` 只承载规范化后的域名/IP，GEOIP 留在 residual YAML 原生查询；删除同策略重复和可证明被覆盖的规则。
+- FAIL-CLOSED：生成链对错误上游替换、未解析嵌套源和非法残余语法直接失败，OpenClash 不再接收部分构建产物。
+
+## v6.0.1-oc-normal.1 / v6.0.1-oc-smart.1 (2026-07-10)
+
+- SYNC：Normal / Smart heredoc 同步到 Clash Party v6.0.1，继续引用融合 `.mrs` / residual YAML，113 个 provider、130 条规则和 55 个策略组不变。
+- DELIVERY：OpenClash 不消费 Issue #174 所涉的移动端文本规则格式；仍由融合编译器和 manifest 保证全端规则顺序一致。
+
+## v6.0.0-oc-normal.1 / v6.0.0-oc-smart.1 (2026-07-09)
+
+- FUSED-RULESETS：Normal / Smart heredoc 同步到 Clash Party v6.0.0 融合规则集，直接使用融合 `.mrs` / residual YAML。
+- SCALE：规则规模从 `474 providers / 931 rules` 压缩为 `113` 个融合 provider 与 `130` 条规则。
+- META：`VERSION_TAG` 与内嵌 Ruby `VERSION` 同步到 v6.0.0。
+
+## v5.4.39-oc-normal.1 / v5.4.39-oc-smart.1 (2026-07-09)
+
+- MRS-PARTIAL：Normal / Smart heredoc 全量同步剩余可迁移规则源，当前为 474 providers、929 条规则。
+- MIHOMO-MRS：424 个 provider 使用 `.mrs`，30 个 provider 使用残余 classical YAML，20 个 provider 因不支持 `.mrs` 类型保留原格式。
+- SCKI-SUPPLEMENTAL：补充规则集 domain/ipcidr 部分改为 `.mrs`；进程规则保持 classical 文本，路由器端可导入但仅 Mihomo 能识别对应语义。
+- META：`VERSION_TAG` 与内嵌 Ruby `VERSION` 同步到 v5.4.39。
+
+## v5.4.38-oc-normal.1 / v5.4.38-oc-smart.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：Normal / Smart heredoc 同步 15 个 `scki-*` rule-provider。
+- MIHOMO-MRS：Normal / Smart heredoc 同步 429 providers、884 条规则，其中 366 个 provider 使用 `.mrs`，38 个混合 classical provider 拆分为 domain/ipcidr 双 `.mrs`。
+- META：`VERSION_TAG` 与内嵌 Ruby `VERSION` 同步到 v5.4.38。
+
+## v5.4.37-oc-normal.1 / v5.4.37-oc-smart.1 (2026-06-29)
+
+- ★ DNS-POLICY#170：Normal / Smart heredoc YAML 的 `dns.nameserver-policy` 同步新增：
+  - `geosite:cn` → AliDNS / DNSPod DoH。
+  - `geosite:geolocation-!cn` → Cloudflare / Google DoH。
+- 两份 `.sh` 的 `VERSION_TAG` 与内嵌 Ruby `VERSION` 同步到 v5.4.37；`OpenClash(mihomo).conf` 参考快照元数据同步到 v5.4.37。
+- `direct-nameserver-follow-policy: true` 保持启用，说明文字同步为 CDN + geosite policy。
+
+## v5.4.36-oc-normal.1 / v5.4.36-oc-smart.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：Normal / Smart 同步删除 22 条经逐条确认的冗余直写规则，provider 保持 376，规则语义与 Clash Party v5.4.36 对齐。
+- `OpenClash(mihomo).conf` 参考快照同步到 v5.4.36；AI / Binance / Microsoft login 候选因不同策略 `.mrs` 前置阻断，继续保留。
+
+## v5.4.35-oc-normal.1 / v5.4.35-oc-smart.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：Normal / Smart 同步删除 8 个冗余 rule-provider 及对应 `RULE-SET` 行：`marketing`、`acc-vf-paypal`、`encoretvb`、`findmy`、`wildrift`、`acfun`、`acc-fl-douyin`、`acc-fl-xiaohongshu`。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置直写规则：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- Provider 数 384 → 376；两份 `.sh` 的规则顺序保持与 Clash Party v5.4.35 对齐。
+- `OpenClash(mihomo).conf` 参考快照元数据对齐 v5.4.35。
+
+## v5.4.34-oc-normal.1 / v5.4.34-oc-smart.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：Normal / Smart 同步新增 MetaCubeX `amap.mrs` provider，下载代理保持 `🚫 受限网站`。
+- 规则顺序：`RULE-SET,amap,🏠 国内网站` 位于广告/威胁规则之后、`proxy` / `geolocation-!cn` 国外兜底之前，避免 `webapi.amap.com` 依赖尾部 CN 兜底。
+- `OpenClash(mihomo).conf` 参考快照元数据对齐 v5.4.34。
+
+## v5.4.33-oc-normal.1 / v5.4.33-oc-smart.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：Normal / Smart 同步新增 `vpsdance-ai-coding` provider 与 AI 服务规则命中。
+- 保留 v5.4.32 国内游戏优先级修复。
+
+## v5.4.32-oc-normal.1 / v5.4.32-oc-smart.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：Normal / Smart heredoc YAML 同步将国内游戏块前置到国外游戏块之前，防止 HoYoverse / Game / category-games 先命中代理。
+- `OpenClash(mihomo).conf` 参考快照元数据对齐 v5.4.32。
+
+## v5.4.31-oc-normal.1 / v5.4.31-oc-smart.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：Normal 与 Smart 同步在广告/TikTok/国外尾部规则前增加抖音 Web 国内流媒体守卫，覆盖 `douyin.com` 与 `zjcdn.com` 等视频 CDN 域名。
+- `OpenClash(mihomo).conf` 参考快照元数据对齐 v5.4.31。
+
+## v5.4.30-oc-normal.1 / v5.4.30-oc-smart.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：Normal 与 Smart 同步新增 `🔍 Google 服务` 业务组，位置在 `🔧 工具与服务` 之前。
+- Scholar、Google 基础服务、Google IP 与 Google QUIC 规则改投新组；Ruby/静态片段的业务组计数同步为 33。
+
+## v5.4.29-oc-normal.1 / v5.4.29-oc-smart.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：OpenClash Normal / Smart 两份 Ruby 覆写生成逻辑统一把区域自动测速 `interval` 设为 300s。
+- 保持 rule-provider 下载代理为 `🚫 受限网站`；本轮不改变 FINAL 兜底语义。
+- `OpenClash(mihomo).conf` 参考快照元数据对齐 v5.4.29。
+
+## v5.4.27-oc-normal.1 / v5.4.27-oc-smart.1 (2026-06-07)
+
+- ★ CLEAN#165：两份覆写脚本同步基线清理 Claude / PayPal / HBO / Hulu / Xbox 上游 rule-provider 已覆盖的直写域名。
+- 额外修正：删除此前 OpenClash 中位于 `RULE-SET,hulu` 之后、实际不可达的 `hulu.jp` / `happyon.jp` 日韩流媒体兜底；删除后首个命中仍为 `RULE-SET,hulu → 📺 Hulu`。
+
+## v5.4.26-oc-normal.1 / v5.4.26-oc-smart.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞——szkane `AiDomain.list` 的 `DOMAIN-KEYWORD,copilot` 子串会把它误吞到 `🤖 AI 服务`（国外代理）导致对话报错；两份覆写脚本均在 `RULE-SET,openai` 等 AI rule-set 之前前置 `DOMAIN-SUFFIX,copilot.tencent.com,\U0001F3E0 国内网站`。基线 Clash Party v5.4.26。
+
+## v5.4.25-oc-normal.2 / v5.4.25-oc-smart.2 (2026-06-05)
+
+- ★ SECURITY#OC-TMP：两份覆写脚本改用 `mktemp` 私有临时文件 + `trap` 清理，避免固定 `/tmp/clash_*` 在并发运行时互相覆盖或被符号链接预置。
+- ★ SYNC#FAKE-IP-FILTER：补齐 `+.pub.3gppnetwork.org` / `+.bing.com` / `+.miwifi.com` 以及 Apple Push / 小米 / 个推真实 IP 条目，与 JS 三端 fake-ip-filter 保持 57 条一致。
+- ★ VERIFY：合同验证新增 OpenClash fake-ip-filter 必需条目校验。
+
+## v5.4.25-oc-normal.1 / v5.4.25-oc-smart.1 (2026-06-04)
 
 - ★ 审查修复：GEOIP 重复规则去重（`GEOIP,netflix` / `GEOIP,google` 各出现 2 次 → 保留 GEOIP 标签路由集中区块）
+- ★ SYNC：`OpenClash(mihomo).conf` 参考快照头部 metadata 对齐 Clash Party v5.4.25；权威运行产物仍为 Normal/Smart 两份 `.sh`。
 
 ## v5.4.23-oc-normal.1 / v5.4.23-oc-smart.1 (2026-06-02)
 

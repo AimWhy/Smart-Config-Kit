@@ -4,6 +4,140 @@
 
 ---
 
+## v6.0.13-Surge.5 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 远程 RULE-SET 增加 `DOMAIN-SUFFIX,linuxdo.org` 并绑定 `🏠 国内网站`；`linux.do` 保持受限网站。
+
+## v6.0.12-Surge.4 (2026-09-01)
+
+- FIX#181-PC：首个融合远程 RULE-SET 增加 `login.nvidia.cn` 精确直连，优先于 NVIDIA 下载宽规则；其他 NVIDIA 域名不变。
+
+## v6.0.11-Surge.3 (2026-08-22)
+
+- ROUTING：同步 69 个融合远程 RULE-SET；Gemini 与 Accademia Gemini 首命中改走 `🔍 Google 服务`，其余 AI 策略不变。
+
+## v6.0.10-Surge.3 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：同步首段精确直连融合规则；两个网易游戏服务主机在 anti-AD 和国内游戏宽规则之前命中 `DIRECT`。
+
+## v6.0.9-Surge.2 (2026-08-02)
+
+- FIX-NODE-ISO-LOWERCASE：11 个地区及家宽 policy-regex-filter 在原有大写匹配旁新增“小写 ISO 两位码紧接编号”分支；带编号的 yun hk01、yun us01、yun jp01、yun sg01、yun tw01 现会归入相应地区策略组。
+- GUARD/VERIFY：普通小写短词不扩宽为地区码；跨客户端合同固定执行 12 个真实命名样例，覆盖主组、聚合组、家宽筛选及无编号短词保护。
+
+## v6.0.9-Surge.1 (2026-07-19)
+
+- 新增通用 GitHub API 工具组融合段，位于上游广义 AI 规则之前；macOS/iOS 无 Windows 进程规则时使用通用回退。
+
+## v6.0.8-Surge.1 (2026-07-15)
+
+- 融合 RULE-SET 同步国内权威优先级，并以发布版本缓存键引用自托管资产。
+
+## v6.0.7-Surge.1 (2026-07-14)
+
+- FIX#176：融合远程 RULE-SET 顺序同步国内域名优先于通用国际 CDN / GeoIP fallback；后置 fallback 使非中国 IP 不再抢占中国域名。
+
+## v6.0.6-Surge.1 (2026-07-14)
+
+- PLATFORM：Windows 的 `WorkPro.exe` / `WorkProWebProcess.exe` 进程直连由桌面产物承载；Surge 不写 Windows 进程规则，继续消费同步后的融合文本资产。
+
+## v6.0.5-Surge.1 (2026-07-14)
+
+- PLATFORM：WorkPro.exe 是 Windows 桌面直连条目，不加入 Surge Mac 专用进程规则集；Windows Mihomo、sing-box 与 Xray 产物负责实际命中。
+
+## v6.0.4-Surge.1 (2026-07-13)
+
+- DIRECT-ITWDB：默认 `DIRECT` 融合文本段新增 `DOMAIN-SUFFIX,itwdb.com`，保持源图首匹配顺序并覆盖 WorkPro 子域名。
+
+## v6.0.3-Surge.1 (2026-07-12)
+
+- SYNC：升级到 Clash Party v6.0.3，消费 64 个非空融合 RULE-SET，保持源图首匹配顺序。
+- AI-PRECEDENCE：OpenAI / ChatGPT、oaistatic、Cloudflare NEL 和必要 telemetry 在通用广告段、国外网站段之前进入 `🤖 AI 服务`。
+
+## v6.0.2-Surge.1 (2026-07-10)
+
+- FIX#175：从 71 个放大分片收敛为 63 个非空融合 RULE-SET，聚合文本约 16.07 MiB / 575,673 条，满足 iOS 聚合预算。
+- GEOIP/ASN：国家 GEOIP 与 IP-ASN 使用 Surge 原生规则；服务型 GEOIP 按平台能力转换，`no-resolve` 修饰符不再丢失。
+- DEDUP：最终 Surge 文本逐文件复验，精确重复、域名覆盖和 CIDR 包含关系的二次可删除数均为 0。
+
+## v6.0.1-Surge.1 (2026-07-10)
+
+- FIX#174：超出 CDN 单文件预算的广告融合段拆为 3 个 RULE-SET，国外网站尾段拆为 2 个 RULE-SET；每个分片不超过 18 MiB。
+- SEMANTICS：所有新增 RULE-SET 沿用原策略和原始顺序，未改变广告拦截、国外网站或任一其他业务组的匹配优先级。
+
+## v6.0.0-Surge.1 (2026-07-09)
+
+- FUSED-RULESETS：迁移到 68 个融合远程 RULE-SET，保留必要本地端口/兜底规则。
+- META：跟随 Clash Party v6.0.0 更新版本元数据；策略组保持不变。
+
+## v5.4.39-Surge.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Surge 不支持 Mihomo `.mrs` rule-provider；规则语义延续 v5.4.38-Surge.1。
+
+## v5.4.38-Surge.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：删除零星本地白名单直写，改为 13 个 Clash supplemental `RULE-SET` + 2 个 Surge process supplemental `RULE-SET`。
+- SYNC：版本元数据同步 Clash Party v5.4.38。
+
+## v5.4.37-Surge.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Surge 使用 `dns-server` / `encrypted-dns-server` / `fallback-dns-server`，没有 Mihomo `nameserver-policy` 同字段面；规则与 DNS 语义不变。
+
+## v5.4.36-Surge.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：同步删除 22 条经逐条确认的冗余 `DOMAIN` / `DOMAIN-SUFFIX` 规则，远程规则集保持不变。
+- AI / Binance / Microsoft login 候选因不同策略 `.mrs` 前置阻断，继续保留。
+
+## v5.4.35-Surge.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：删除 5 个已被前序同目标规则覆盖的远程 RULE-SET：Marketing、EncoreTVB、FindMy、WildRift、AcFun。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置直写规则：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- 远程 RULE-SET 实测数 288 → 283；匹配顺序不变。
+
+## v5.4.34-Surge.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 blackmatrix7 Surge `GaoDe.list`，归入 `🏠 国内网站`。
+- 顺序保持在广告/威胁规则之后、国外网站兜底之前，修复 `webapi.amap.com` 高德 API 误走国外的风险。
+
+## v5.4.33-Surge.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：新增 VPSDance Surge `coding.list`，归入 `🤖 AI 服务`。
+
+## v5.4.32-Surge.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：国内游戏内联规则和 SteamCN 等 RULE-SET 早于国外游戏 RULE-SET，防止 HoYoverse/Game 宽规则抢先命中。
+- 文件头与 README 对齐 Clash Party v5.4.32。
+
+## v5.4.31-Surge.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：新增抖音 Web 国内流媒体前置规则，`douyin.com` / `zjcdn.com` 等域名先于 TikTok 和国外规则集命中 `📺 国内流媒体`。
+- 文件头与 README 对齐 Clash Party v5.4.31。
+
+## v5.4.30-Surge.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `🔍 Google 服务` 策略组，位置在 `🔧 工具与服务` 之前。
+- Google Search / Drive / Earth / Google / Scholar 规则集改投新组；工具组只承载非 Google 搜索和开发者服务。
+
+## v5.4.29-Surge.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：22 个区域 `url-test` 组 `interval=180 -> interval=300`。
+- README 的区域组说明同步改为 300s / 5 分钟；业务策略、DNS 与 RULE-SET 不变。
+- 文件头对齐 Clash Party v5.4.29。
+
+## v5.4.27-Surge.1 (2026-06-07)
+
+- ★ CLEAN#165：同步清理 7 条已由前置远程规则集覆盖的本地直写域名（Claude / PayPal / HBO / Hulu / Xbox）；删除后仍命中同策略组。
+
+## v5.4.26-Surge.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞——szkane `AiDomain.list` 的 `DOMAIN-KEYWORD,copilot` 子串会把它误吞到 `🤖 AI 服务`（国外代理）导致对话报错；在 szkane AiDomain RULE-SET 之前前置 `DOMAIN-SUFFIX,copilot.tencent.com,🏠 国内网站`（与既有 RustDesk 防吞守卫并置）。基线 Clash Party v5.4.26。
+
+## v5.4.25-Surge.1 (2026-06-04)
+
+- ★ SYNC：产物头部版本和基线声明对齐 Clash Party v5.4.25；规则语义延续 v5.4.23-Surge.2，无新增 Surge 专属规则变更。
+
 ## v5.4.23-Surge.2 (2026-06-02)
 
 - ★ FIX#162：修复远程规则列表加载失败风险：

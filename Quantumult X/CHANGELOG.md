@@ -2,9 +2,160 @@
 
 > `Quantumult X/QuantumultX.conf` 的变更日志。主版本号跟随 Clash Party 主线；尾段 `-QX.N` 独立递增。
 >
-> 本文件**由 `tools/srk_to_qx.py`（或等价脚本）从 Shadowrocket 自动转换**生成。重新同步时请运行该脚本而不是手工改 `.conf`。
+> 当前仓库无 `tools/srk_to_qx.py`；本产物独立手工维护，并由 `tools/validate-artifact-contracts.js` 做结构和基线验证。
 
 ---
+
+## v6.0.13-QX.5 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 remote filter 增加 `host-suffix, linuxdo.org` 并绑定 `🏠 国内网站`；`linux.do` 保持第 059 受限网站 filter。
+
+## v6.0.12-QX.4 (2026-09-01)
+
+- FIX#181-PC：第一个 remote URL filter 增加 `host, login.nvidia.cn` 并绑定 `direct`，其余 NVIDIA 域名继续使用下载组 filter。
+
+## v6.0.11-QX.3 (2026-08-22)
+
+- ROUTING：69 个 remote URL filter 按融合顺序更新；Gemini 与 Accademia Gemini 改走 `🔍 Google 服务`，广告规则仍优先。
+
+## v6.0.10-QX.3 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：同步首段精确直连融合 URL；两个网易游戏服务主机在 anti-AD 和国内游戏宽规则之前命中 `direct`。
+
+## v6.0.9-QX.2 (2026-08-02)
+
+- FIX-NODE-ISO-LOWERCASE：server-tag-regex 在原有大写匹配旁新增“小写 ISO 两位码紧接编号”分支；当订阅解析器把节点名写入 tag 时，yun hk01、yun us01、yun jp01、yun sg01、yun tw01 会进入预期区域。
+- GUARD/VERIFY：普通小写短词不扩宽为地区码；跨客户端合同回归 12 个原始 tag 样例，并确认主组、聚合组、家宽组及无编号短词保护。
+
+## v6.0.9-QX.1 (2026-07-19)
+
+- `filter_remote` 加入并前置通用 GitHub API 工具组融合资产；iOS 无桌面进程识别时使用此通用回退。
+
+## v6.0.8-QX.1 (2026-07-15)
+
+- remote filter 同步国内权威优先级，并以发布版本缓存键引用自托管资产。
+
+## v6.0.7-QX.1 (2026-07-14)
+
+- FIX#176：`filter_remote` 顺序同步国内域名优先于通用国际 CDN / GeoIP fallback，新增后置 fallback filter 并保持首匹配语义。
+
+## v6.0.6-QX.1 (2026-07-14)
+
+- PLATFORM：Windows 的 `WorkPro.exe` / `WorkProWebProcess.exe` 进程直连由桌面产物承载；Quantumult X iOS 不新增主动进程规则，继续消费同步后的融合 remote filter。
+
+## v6.0.5-QX.1 (2026-07-14)
+
+- PLATFORM：WorkPro.exe 的 Windows 桌面直连由支持进程匹配的产物承载；Quantumult X iOS 配置不新增主动进程规则。
+
+## v6.0.4-QX.1 (2026-07-13)
+
+- DIRECT-ITWDB：`filter_remote` 的默认 direct 融合资产新增 `host-suffix, itwdb.com`，覆盖 WorkPro 子域名。
+
+## v6.0.3-QX.1 (2026-07-12)
+
+- SYNC：升级到 Clash Party v6.0.3，`filter_remote` 为 64 个非空融合资产，继续保留 QX 原生 GEOIP / IP-ASN 表达。
+- AI-PRECEDENCE：ChatGPT/OpenAI 与经验证的 Sentry/DataDog/Cloudflare 关联 host 在广告和国外网站前进入 `🤖 AI 服务`。
+
+## v6.0.2-QX.1 (2026-07-10)
+
+- FIX#175：`filter_remote` 收敛为 63 个非空融合段，聚合文本约 15.56 MiB / 575,498 条。
+- NATIVE：国家 GEOIP 输出为 QX 原生 `geoip`，IP-ASN 输出为 `ip-asn`，并保留 `no-resolve`；仅服务型 GEOIP 展开 CIDR。
+- DEDUP/BUDGET：继承同策略安全去重并加入 32 MiB / 100 万条聚合门禁。
+
+## v6.0.1-QX.1 (2026-07-10)
+
+- FIX#174：广告融合段和国外网站尾段的超限 remote filter 按 18 MiB 上限拆分为同策略、有序分片。
+- SEMANTICS：每个新增 `filter_remote` 保持原 `force-policy`，分流内容与匹配优先级不变。
+
+## v6.0.0-QX.1 (2026-07-09)
+
+- FUSED-RULESETS：迁移到 68 个融合 remote URL filter，保留 QX 必要本地端口/兜底规则。
+- META：跟随 Clash Party v6.0.0 更新版本元数据；策略组保持不变。
+
+## v5.4.39-QX.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Quantumult X 不支持 Mihomo `.mrs` rule-provider；规则语义延续 v5.4.38-QX.1。
+
+## v5.4.38-QX.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：`[filter_remote]` 新增 13 个 Quantumult X 原生 supplemental 规则集，替代 `filter_local` 零星白名单。
+- SYNC：版本元数据同步 Clash Party v5.4.38。
+
+## v5.4.37-QX.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Quantumult X 使用 `[dns]` / `[filter_remote]` / `[filter_local]` 私有语法，没有 Mihomo `nameserver-policy` 同字段面；规则与 DNS 语义不变。
+
+## v5.4.36-QX.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：同步删除 22 条经逐条确认的冗余 `host` / `host-suffix` 规则，`filter_remote` 保持不变。
+- AI / Binance / Microsoft login 候选因不同策略 `.mrs` 前置阻断，继续保留。
+
+## v5.4.35-QX.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：删除 5 个已被前序同目标规则覆盖的 `filter_remote`：Marketing、EncoreTVB、FindMy、WildRift、AcFun。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置 `filter_local`：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- `filter_remote` 实测数 285 → 280；`filter_local` 556 → 553，QX 本地规则仍只放在 `[filter_local]`。
+
+## v5.4.34-QX.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 blackmatrix7 Quantumult X `GaoDe.list` filter_remote，归入 `🏠 国内网站`。
+- 顺序保持在广告/威胁规则之后、国外网站兜底之前，修复 `webapi.amap.com` 高德 API 误走国外的风险。
+
+## v5.4.33-QX.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：新增 VPSDance Quantumult X `coding.list` filter_remote，归入 `🤖 AI 服务`。
+
+## v5.4.32-QX.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：`filter_local` 国内游戏段前置到国外游戏段之前；`filter_remote` 保持国内游戏规则集先于国外游戏规则集。
+- 文件头与 README 对齐 Clash Party v5.4.32。
+
+## v5.4.31-QX.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：在 `[filter_local]` 首段增加抖音 Web 国内流媒体守卫，`douyin.com` / `zjcdn.com` 等域名命中 `📺 国内流媒体`。
+- `filter_local` 计数随新增 10 条前置规则更新，文件头与 README 对齐 Clash Party v5.4.31。
+
+## v5.4.30-QX.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `static=🔍 Google 服务`，插入在 `🔧 工具与服务` 之前。
+- Google / Scholar 远程规则改投新组；工具组保留 Bing / Yandex / GitHub / Docker / GitLab / Python / developer 等非 Google 规则。
+
+## v5.4.29-QX.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：22 个区域 `url-latency-benchmark` 组 `check-interval=180 -> check-interval=300`。
+- README 的测速说明同步改为 300s / 5 分钟；`filter_remote` / `filter_local` 规则内容不变。
+- 文件头对齐 Clash Party v5.4.29。
+
+## v5.4.28-QX.1 (2026-06-07)
+
+- ★ CLEAN#165（续）：`[filter_local]` 移除 35 行已被同策略 `[filter_remote]` 规则集覆盖的直写域名
+  - 🇭🇰 香港流媒体：mytvsuper.com, nowe.com, rthk.hk, cabletv.com.hk（覆盖：myTVSUPER/NowE/RTHK/CableTV）
+  - 🇹🇼 台湾流媒体：litv.tv, video.friday.tw, friday.tw, linetv.tw, hamivideo.hinet.net（覆盖：LiTV/friDay/LineTV/HamiVideo）
+  - 🇯🇵 日韩流媒体：tver.jp, dmm.com, dmm.co.jp, nicovideo.jp, nicovideo.me（覆盖：TVer/DMM/Niconico）
+  - 🇪🇺 欧洲流媒体：itv.com, itvstatic.com, britbox.com（覆盖：ITV/BritboxUK）
+  - 🌐 其他国外流媒体：discoveryplus.com, wetv.vip, wetvinfo.com, viki.com, viki.io, mewatch.sg（覆盖：DiscoveryPlus/WeTV/Viki/MeWatch）
+  - 🎮 国外游戏：ubisoft.com, ubi.com, riotgames.com, leagueoflegends.com, valorant.com, rockstargames.com, gog.com, gogalaxy.com, supercell.com, garena.com, hoyoverse.com, hoyolab.com（覆盖：UBI/Riot/Rockstar/Gog/Supercell/Garena/HoYoverse）
+  - 每处移除位置保留 `# CLEAN#165:` 注释标注覆盖来源
+
+## v5.4.27-QX.1 (2026-06-07)
+
+- ★ CLEAN#165（第 1 批）：同步清理 7 条已由 `[filter_remote]` 覆盖的 `[filter_local]` 直写域名（Claude / PayPal / HBO / Hulu / Xbox）；删除后仍命中同策略组。第 2 批见 v5.4.28-QX.1。
+
+## v5.4.26-QX.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞——szkane `AiDomain.list`（`[filter_remote]` tag=aidomain，force-policy=🤖 AI 服务）含 `DOMAIN-KEYWORD,copilot` 子串会把它误吞到国外代理导致对话报错；在 `[filter_local]` 前置 `host-suffix, copilot.tencent.com, 🏠 国内网站`（与既有 RustDesk 防吞守卫并置，本地规则优先于远程资源匹配）。基线 Clash Party v5.4.26。
+
+## v5.4.25-QX.2 (2026-06-05)
+
+- ★ FIX#QX-FILTER-SECTION：将小米 / Cloudflare R2 / Paddle / 推送 SDK / RustDesk 本地白名单从 `[filter_remote]` 移到 `[filter_local]`，避免 QX 把本地 `host/host-suffix` 规则当作远程资源声明处理。
+- ★ VERIFY：合同验证新增 `[filter_remote]` 不得包含本地规则、关键白名单必须位于 `[filter_local]` 的检查。
+
+## v5.4.25-QX.1 (2026-06-04)
+
+- ★ SYNC：产物头部版本和基线声明对齐 Clash Party v5.4.25；规则语义延续 v5.4.23-QX.2。
+- ★ DOC#QX-P2：移除不存在的 `tools/srk_to_qx.py` 自动转换声明；恢复自动转换前必须先提交脚本并纳入验证。
 
 ## v5.4.23-QX.2 (2026-06-02)
 

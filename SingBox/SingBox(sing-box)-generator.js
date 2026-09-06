@@ -1,9 +1,11 @@
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
+const { repositoryAssetUrl } = require('../tools/lib/generated-asset-url');
 
-const VERSION = 'v5.4.25-sing.1';
-const BUILD = '2026-06-04';
-const BASELINE = 'Clash Party v5.4.25';
+const VERSION = 'v6.0.13-sing.4';
+const BUILD = '2026-09-03';
+const BASELINE = 'Clash Party v6.0.13';
 
 const SMART = {
   GLOBAL: '🌍 全球节点',
@@ -44,13 +46,14 @@ const BIZ = {
   PRIME: '🎬 Prime Video',
   YT: '📹 YouTube',
   MUSIC: '🎵 音乐流媒体',
-  STREAM_OTHER: '🌐 其他国外流媒体',
   STREAM_HK: '🇭🇰 香港流媒体',
   STREAM_TW: '🇹🇼 台湾流媒体',
   STREAM_JP: '🇯🇵 日韩流媒体',
   STREAM_EU: '🇪🇺 欧洲流媒体',
+  STREAM_OTHER: '🌐 其他国外流媒体',
   GAME_CN: '🕹️ 国内游戏',
   GAME_INTL: '🎮 国外游戏',
+  GOOGLE: '🔍 Google 服务',
   TOOLS: '🔧 工具与服务',
   MS: 'Ⓜ️ 微软服务',
   APPLE: '🍎 苹果服务',
@@ -123,7 +126,26 @@ const REGION_PLACEHOLDERS = [
 ];
 
 const clashScript = fs.readFileSync('Clash Party/ClashParty(mihomo-smart).js', 'utf8');
-const baseConfig = JSON.parse(fs.readFileSync('SingBox/SingBox(sing-box)-full.json', 'utf8'));
+const baseConfig = {
+  log: {
+    level: 'info',
+    timestamp: true
+  },
+  _meta: {
+    name: 'SingBox Smart Full',
+    version: VERSION,
+    build: BUILD,
+    baseline: BASELINE,
+    changelog: '见 SingBox/CHANGELOG.md'
+  },
+  experimental: {
+    cache_file: {
+      enabled: true,
+      path: 'cache.db',
+      store_fakeip: true
+    }
+  }
+};
 
 const sandbox = { console: { log: function(){}, error: function(){}, warn: function(){} } };
 vm.createContext(sandbox);
@@ -162,6 +184,33 @@ const out = sandbox.__main(clashConfig);
 const providers = out['rule-providers'] || {};
 const rules = out.rules || [];
 const ADS_OUTBOUND = '🛑 广告拦截';
+const FUSED_MANIFEST_FILE = path.join(__dirname, '..', 'rulesets', 'generated', 'fused', 'manifest.json');
+
+function loadFusedManifest() {
+  if (!fs.existsSync(FUSED_MANIFEST_FILE)) throw new Error(`missing fused manifest: ${FUSED_MANIFEST_FILE}`);
+  const manifest = JSON.parse(fs.readFileSync(FUSED_MANIFEST_FILE, 'utf8'));
+  if (!Array.isArray(manifest.segments) || manifest.segments.length === 0) throw new Error('fused manifest has no segments');
+  return manifest;
+}
+
+const fusedManifest = loadFusedManifest();
+const fusedAssetRevision = fusedManifest.asset_revision;
+const fusedProviderToSegment = new Map();
+for (const segment of fusedManifest.segments) {
+  const targetTag = segment.files && segment.files.sing_box ? segment.id : null;
+  for (const [fileKey, suffix] of [
+    ['domain', 'domain'],
+    ['ipcidr', 'ipcidr'],
+    ['ipcidr_no_resolve', 'ipcidr-no-resolve'],
+    ['residual', 'residual'],
+  ]) {
+    if (segment.files && segment.files[fileKey]) fusedProviderToSegment.set(`${segment.id}-${suffix}`, targetTag);
+  }
+}
+const unmappedFusedProviders = Object.keys(providers).filter((tag) => !fusedProviderToSegment.has(tag));
+if (unmappedFusedProviders.length > 0) {
+  throw new Error(`Mihomo fused providers absent from fused manifest: ${unmappedFusedProviders.join(',')}`);
+}
 
 function withResidential(keys) {
   const result = [];
@@ -217,7 +266,7 @@ function urltest(tag, outbounds) {
     type: 'urltest',
     tag,
     outbounds,
-    interval: '3m',
+    interval: '5m',
     tolerance: 10
   };
 }
@@ -253,13 +302,14 @@ function buildOutbounds() {
     selector(BIZ.PRIME, buildStandardProxies()),
     selector(BIZ.YT, buildStandardProxies()),
     selector(BIZ.MUSIC, buildStandardProxies()),
-    selector(BIZ.STREAM_OTHER, buildStandardProxies()),
     selector(BIZ.STREAM_HK, buildRegionPreferredProxies('HK')),
     selector(BIZ.STREAM_TW, buildRegionPreferredProxies('TW')),
     selector(BIZ.STREAM_JP, buildRegionPreferredProxies('JPKR')),
     selector(BIZ.STREAM_EU, buildRegionPreferredProxies('EU')),
+    selector(BIZ.STREAM_OTHER, buildStandardProxies()),
     selector(BIZ.GAME_CN, buildDirectFirstProxies()),
     selector(BIZ.GAME_INTL, buildStandardProxies()),
+    selector(BIZ.GOOGLE, buildStandardProxies()),
     selector(BIZ.TOOLS, buildStandardProxies()),
     selector(BIZ.MS, buildStandardProxies()),
     selector(BIZ.APPLE, buildDirectFirstProxies()),
@@ -325,39 +375,49 @@ function isRejectTarget(target) {
   return target === 'REJECT' || target === ADS_OUTBOUND;
 }
 
-// szkane/ClashRuleSet BilibiliHMT.list 为 Clash 私有 .list 文本，
-// MetaCubeX/meta-rules-dat 没有对应的 .srs，无法作为 sing-box remote rule_set 使用。
-// 将 21 条原始条目内联到一条默认规则里；sing-box 对同一分类下的
-// domain / domain_suffix / ip_cidr 默认按 OR 组合（见官方 route/rule 文档）。
-const SZKANE_BILIHMT_RULE = {
-  domain: [
-    'p-bstarstatic.akamaized.net',
-    'p.bstarstatic.com',
-    'upos-bstar-mirrorakam.akamaized.net',
-    'upos-bstar1-mirrorakam.akamaized.net',
-    'upos-hz-mirrorakam.akamaized.net'
-  ],
-  domain_suffix: [
-    'acgvideo.com',
-    'bilibili.com',
-    'bilibili.tv'
-  ],
-  ip_cidr: [
-    '45.43.32.234/32',
-    '103.151.150.0/23',
-    '119.29.29.29/32',
-    '128.1.62.200/32',
-    '128.1.62.201/32',
-    '150.116.92.250/32',
-    '164.52.33.178/32',
-    '164.52.33.182/32',
-    '164.52.76.18/32',
-    '203.107.1.33/32',
-    '203.107.1.34/32',
-    '203.107.1.65/32',
-    '203.107.1.66/32'
-  ]
-};
+function splitTopLevel(rule) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const char of String(rule)) {
+    if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    current += char;
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim());
+}
+
+function splitTupleList(value) {
+  const inner = String(value || '').trim().replace(/^\(/, '').replace(/\)$/, '');
+  return splitTopLevel(inner)
+    .map((item) => item.trim().replace(/^\(/, '').replace(/\)$/, ''))
+    .filter(Boolean);
+}
+
+function toSingAndRule(ruleText) {
+  const [type, value, policy] = splitTopLevel(ruleText);
+  if (type !== 'AND' || !policy) return null;
+
+  const conditions = splitTupleList(value).map(splitTopLevel);
+  const process = conditions.find((condition) => condition[0] === 'PROCESS-NAME');
+  const domain = conditions.find((condition) => ['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX'].includes(condition[0]));
+  if (!process || !domain || conditions.length !== 2) return null;
+
+  const result = isRejectTarget(policy)
+    ? { process_name: [process[1]], action: 'reject' }
+    : { process_name: [process[1]], action: 'route', outbound: policy };
+  if (domain[0] === 'DOMAIN') result.domain = [domain[1]];
+  else if (domain[0] === 'DOMAIN-SUFFIX') result.domain_suffix = [domain[1]];
+  else if (domain[0] === 'DOMAIN-KEYWORD') result.domain_keyword = [domain[1]];
+  else result.domain_regex = [domain[1]];
+  return result;
+}
 
 function toSingRule(ruleText, availableRuleSets) {
   if (typeof ruleText !== 'string') return null;
@@ -365,12 +425,6 @@ function toSingRule(ruleText, availableRuleSets) {
   const type = parts[0];
 
   if (type === 'RULE-SET') {
-    if (parts[1] === 'szkane-bilihmt') {
-      if (isRejectTarget(parts[2])) {
-        return { ...SZKANE_BILIHMT_RULE, action: 'reject' };
-      }
-      return { ...SZKANE_BILIHMT_RULE, action: 'route', outbound: parts[2] };
-    }
     if (!availableRuleSets.has(parts[1])) return null;
     if (isRejectTarget(parts[2])) return { rule_set: [parts[1]], action: 'reject' };
     return { rule_set: [parts[1]], action: 'route', outbound: parts[2] };
@@ -419,24 +473,8 @@ function toSingRule(ruleText, availableRuleSets) {
     return { network: parts[1], action: 'route', outbound: parts[2] };
   }
   if (type === 'MATCH') {
-    return { action: 'route', outbound: parts[1] };
+    return null;
   }
-  return null;
-}
-
-function toSrsUrl(url, tag) {
-  if (!url) return null;
-  if (/\.srs$/i.test(url)) return url;
-
-  const metaRulesDat = url.match(/^(https:\/\/(?:fastly\.|cdn\.)?jsdelivr\.net\/gh\/MetaCubeX\/meta-rules-dat)@meta\/geo\/(geosite|geoip)\/(.+)\.mrs$/i);
-  if (metaRulesDat) {
-    return `${metaRulesDat[1]}@sing/geo/${metaRulesDat[2]}/${metaRulesDat[3]}.srs`;
-  }
-
-  if (tag === 'anti-ad' && /DustinWin\/ruleset_geodata@mihomo-ruleset\/ads\.mrs$/i.test(url)) {
-    return 'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/ads.srs';
-  }
-
   return null;
 }
 
@@ -454,31 +492,51 @@ const extraGeoSiteTags = Array.from(new Set(
   update_interval: '1d'
 }));
 
-const ruleSet = Object.entries(providers).map(([tag, info]) => {
-  const url = toSrsUrl(info.url, tag);
-  if (!url) return null;
+const ruleSet = fusedManifest.segments.filter((segment) => (
+  segment.files && segment.files.sing_box
+)).map((segment) => {
+  return {
+    type: 'remote',
+    tag: segment.id,
+    format: 'binary',
+    url: repositoryAssetUrl(`rulesets/generated/fused/sing-box/${segment.files.sing_box.file}`, fusedAssetRevision),
+    http_client: { detour: SMART.GLOBAL },
+    update_interval: '1d'
+  };
+});
+
+function metaGeositeRuleSet(tag, name) {
   return {
     type: 'remote',
     tag,
     format: 'binary',
-    url,
+    url: `https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/${name}.srs`,
     http_client: { detour: SMART.GLOBAL },
     update_interval: '1d'
   };
-}).filter(Boolean);
+}
 
-// v5.4.18: removed geosite-cn / geoip-cn — reuse provider-derived 'cn' / 'cn-ip' tags
-// already created by ruleSet to avoid duplicate .srs downloads (~2-5 MB wasted per cycle).
-// geosite-private is kept as a defensive entry for DNS rules in case no GEOSITE,private rule exists.
-const dnsRouteRuleSets = [
-  {
+function metaGeoipRuleSet(tag, name) {
+  return {
     type: 'remote',
-    tag: 'geosite-private',
+    tag,
     format: 'binary',
-    url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/private.srs',
+    url: `https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/${name}.srs`,
     http_client: { detour: SMART.GLOBAL },
     update_interval: '1d'
-  }
+  };
+}
+
+// Runtime GEO helpers remain explicit sing-box rule_sets. They are not upstream
+// business providers and are only used for DNS/private/CN/QUIC guard logic.
+const requiredGeoRuleSets = [
+  metaGeositeRuleSet('geosite-private', 'private'),
+  metaGeositeRuleSet('geosite-youtube', 'youtube'),
+  metaGeositeRuleSet('geosite-google', 'google'),
+  metaGeositeRuleSet('geosite-microsoft', 'microsoft'),
+  metaGeositeRuleSet('geosite-apple', 'apple'),
+  metaGeositeRuleSet('geosite-cn', 'cn'),
+  metaGeoipRuleSet('geoip-cn', 'cn')
 ];
 
 function uniqueRuleSets(items) {
@@ -490,13 +548,63 @@ function uniqueRuleSets(items) {
   });
 }
 
-const allRouteRuleSets = uniqueRuleSets([...ruleSet, ...extraGeoSiteTags, ...dnsRouteRuleSets]);
+const allRouteRuleSets = uniqueRuleSets([...ruleSet, ...requiredGeoRuleSets, ...extraGeoSiteTags]);
 const availableRuleSets = new Set(allRouteRuleSets.map((item) => item.tag));
-let convertedRules = rules.map((rule) => toSingRule(rule, availableRuleSets)).filter(Boolean);
-const skippedProviders = Object.keys(providers).length - ruleSet.length;
-// v5.4.22: AND/QUIC rules handled out-of-band (not through toSingRule), don't count as skipped
+const adFusedRuleSet = fusedManifest.segments.find((segment) => segment.policy === BIZ.AD && segment.files && segment.files.sing_box);
+if (!adFusedRuleSet) throw new Error('missing fused ad rule set for Sing-box DNS rejection');
+// v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——sing-box 首命中模型逐条匹配。
+// 插入到 Clash 主线 5 条 AND/QUIC 规则所在位置，避免被后续普通规则或 route.final 改变语义。
+// YouTube/Google/MS/Apple QUIC → 走对应业务组；CN QUIC → DIRECT 放行；其余海外 QUIC → REJECT。
+const quicRules = [
+  { rule_set: ['geosite-youtube'], port: [443], network: 'udp', action: 'route', outbound: '📹 YouTube' },
+  { rule_set: ['geosite-google'], port: [443], network: 'udp', action: 'route', outbound: '🔍 Google 服务' },
+  { rule_set: ['geosite-microsoft'], port: [443], network: 'udp', action: 'route', outbound: 'Ⓜ️ 微软服务' },
+  { rule_set: ['geosite-apple'], port: [443], network: 'udp', action: 'route', outbound: '🍎 苹果服务' },
+  { rule_set: ['geosite-cn'], port: [443], network: 'udp', action: 'route', outbound: 'DIRECT' },
+  { port: [443], network: 'udp', action: 'reject' },
+];
+let convertedRules = [];
+let insertedQuicRules = false;
+let convertedSourceRules = 0;
+const emittedFusedSegments = new Set();
+for (const rule of rules) {
+  if (String(rule).startsWith('AND,((DST-PORT,443),(NETWORK,UDP),')) {
+    if (!insertedQuicRules) {
+      convertedRules.push(...quicRules);
+      insertedQuicRules = true;
+    }
+    continue;
+  }
+  const logical = toSingAndRule(rule);
+  if (logical) {
+    convertedRules.push(logical);
+    convertedSourceRules++;
+    continue;
+  }
+  const parts = String(rule).split(',');
+  if (parts[0] === 'RULE-SET' && fusedProviderToSegment.has(parts[1])) {
+    convertedSourceRules++;
+    const segmentTag = fusedProviderToSegment.get(parts[1]);
+    if (!segmentTag || emittedFusedSegments.has(segmentTag)) continue;
+    emittedFusedSegments.add(segmentTag);
+    const converted = toSingRule(`RULE-SET,${segmentTag},${parts[2]}`, availableRuleSets);
+    if (!converted) throw new Error(`cannot map fused segment to sing-box route rule: ${segmentTag}`);
+    convertedRules.push(converted);
+    continue;
+  }
+  const converted = toSingRule(rule, availableRuleSets);
+  if (converted) {
+    convertedRules.push(converted);
+    convertedSourceRules++;
+  }
+}
+if (!insertedQuicRules) convertedRules.unshift(...quicRules);
+const skippedProviders = unmappedFusedProviders.length;
+const coalescedProviders = Object.keys(providers).length - ruleSet.length;
+// v5.4.22: AND/QUIC rules handled out-of-band；MATCH fallback is represented by route.final.
 const QUIC_AND_RULES = 5;
-const skippedRules = rules.length - convertedRules.length - QUIC_AND_RULES;
+const MATCH_FALLBACK_RULES = 1;
+const skippedRules = rules.length - convertedSourceRules - QUIC_AND_RULES - MATCH_FALLBACK_RULES;
 
 // v5.4.23-sing.2: Remove redundant domain_suffix rules that are fully covered by
 // a corresponding rule_set pointing to the same outbound.  The "root" domain suffix
@@ -533,14 +641,6 @@ if (redundantDomainSet.size > 0) {
     console.log(`removed ${before - convertedRules.length} redundant domain_suffix rules`);
   }
 }
-
-baseConfig._meta = {
-  name: 'SingBox Smart Full',
-  version: VERSION,
-  build: BUILD,
-  baseline: BASELINE,
-  changelog: '见 SingBox/CHANGELOG.md'
-};
 
 baseConfig.dns = {
   servers: [
@@ -601,12 +701,12 @@ baseConfig.dns = {
   ],
   rules: [
     {
-      rule_set: ['geosite-private', 'cn', 'cn-ip'],
+      rule_set: ['geosite-private', 'geosite-cn', 'geoip-cn'],
       action: 'route',
       server: 'dns_direct'
     },
     {
-      rule_set: ['anti-ad'],
+      rule_set: [adFusedRuleSet.id],
       action: 'reject'
     }
   ],
@@ -614,7 +714,25 @@ baseConfig.dns = {
   strategy: 'prefer_ipv4'
 };
 
+baseConfig.inbounds = [
+  {
+    type: 'tun',
+    tag: 'tun-in',
+    address: ['172.19.0.1/30'],
+    mtu: 9000,
+    auto_route: true,
+    strict_route: true,
+    sniff: true,
+    sniff_override_destination: true,
+    stack: 'mixed'
+  }
+];
+
 baseConfig.outbounds = buildOutbounds();
+baseConfig.route = {
+  auto_detect_interface: true,
+  final: BIZ.FINAL
+};
 
 // v5.4.23-sing.2: Remove redundant Google sub-service rule_sets (googlesearch, googledrive,
 // googleearth) — these are fully covered by the unified 'google' rule_set.
@@ -638,19 +756,8 @@ convertedRules = convertedRules.filter((rule) => {
   return true;
 });
 
-// v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——sing-box 首命中模型逐条匹配
-// YouTube/Google/MS/Apple QUIC → 走对应业务组；CN QUIC → DIRECT 放行；其余海外 QUIC → REJECT
-const quicRules = [
-  { rule_set: ['geosite-youtube'], port: [443], network: 'udp', action: 'route', outbound: '📹 YouTube' },
-  { rule_set: ['geosite-google'], port: [443], network: 'udp', action: 'route', outbound: '🔧 工具与服务' },
-  { rule_set: ['microsoft'], port: [443], network: 'udp', action: 'route', outbound: 'Ⓜ️ 微软服务' },
-  { rule_set: ['apple'], port: [443], network: 'udp', action: 'route', outbound: '🍎 苹果服务' },
-  { rule_set: ['geosite-cn'], port: [443], network: 'udp', action: 'route', outbound: 'DIRECT' },
-  { port: [443], network: 'udp', action: 'reject' },
-];
-baseConfig.route.rules = [...convertedRules, ...quicRules];
-baseConfig.route.final = BIZ.FINAL;
+baseConfig.route.rules = convertedRules;
 
 fs.writeFileSync('SingBox/SingBox(sing-box)-full.json', JSON.stringify(baseConfig, null, 2) + '\n');
 
-console.log(`providers=${ruleSet.length} extra_geosite=${extraGeoSiteTags.length} skipped_providers=${skippedProviders} rules=${convertedRules.length} skipped_rules=${skippedRules}`);
+console.log(`providers=${ruleSet.length} coalesced_providers=${coalescedProviders} extra_geosite=${extraGeoSiteTags.length} skipped_providers=${skippedProviders} rules=${convertedRules.length} skipped_rules=${skippedRules}`);

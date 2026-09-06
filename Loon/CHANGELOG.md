@@ -4,6 +4,135 @@
 
 ---
 
+## v6.0.13-Loon.4 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 Remote Rule 增加 `linuxdo.org` 后缀并绑定 `🏠 国内网站`；`linux.do` 保持受限网站。
+
+## v6.0.12-Loon.3 (2026-09-01)
+
+- FIX#181-PC：首个融合 Remote Rule 增加 `login.nvidia.cn` 精确直连，优先于 NVIDIA 下载宽规则；其他 NVIDIA 域名不变。
+
+## v6.0.11-Loon.2 (2026-08-22)
+
+- ROUTING：同步 69 个融合 Remote Rule；Gemini 与 Accademia Gemini 改走 `🔍 Google 服务`，szkane AI 段保持原位。
+
+## v6.0.10-Loon.2 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：同步首段精确直连融合规则；两个网易游戏服务主机在 anti-AD 和国内游戏宽规则之前命中 `DIRECT`。
+
+## v6.0.9-Loon.1 (2026-07-19)
+
+- Remote Rule 顺序加入通用 GitHub API 工具组段，避免普通请求被广义 AI 规则提前匹配。
+
+## v6.0.8-Loon.1 (2026-07-15)
+
+- Remote Rule 同步国内权威优先级，并以发布版本缓存键引用自托管资产。
+
+## v6.0.7-Loon.1 (2026-07-14)
+
+- FIX#176：`[Remote Rule]` 的融合资产顺序同步国内域名优先于通用国际 CDN / GeoIP fallback。
+
+## v6.0.6-Loon.1 (2026-07-14)
+
+- PLATFORM：Windows 的 `WorkPro.exe` / `WorkProWebProcess.exe` 进程直连由桌面产物承载；Loon iOS 不新增主动进程规则，继续消费同步后的融合远程规则集。
+
+## v6.0.5-Loon.1 (2026-07-14)
+
+- PLATFORM：WorkPro.exe 的 Windows 桌面直连由支持进程匹配的产物承载；Loon iOS 配置不新增主动进程规则。
+
+## v6.0.4-Loon.1 (2026-07-13)
+
+- DIRECT-ITWDB：`[Remote Rule]` 消费的默认 `DIRECT` 融合规则集新增 `itwdb.com`，覆盖 WorkPro 子域名。
+
+## v6.0.3-Loon.1 (2026-07-12)
+
+- SYNC：升级到 Clash Party v6.0.3，`[Remote Rule]` 为 64 个非空融合资产。
+- AI-PRECEDENCE：按 source graph 的前置顺序将 ChatGPT/OpenAI 及必要关联 host 分配给 `🤖 AI 服务`，不落入广告或国外网站兜底。
+
+## v6.0.2-Loon.1 (2026-07-10)
+
+- FIX#175：`[Remote Rule]` 从 71 个放大分片收敛为 63 个非空融合段，聚合文本约 16.06 MiB / 575,499 条。
+- GEOIP：国家码保留为 Loon 原生 GEOIP，服务型标签才转换为 CIDR；不再把区域 GeoRouting 规则展开为数十万网段。
+- BUDGET：配置纳入 iOS 32 MiB / 100 万条聚合门禁和 18 MiB 单文件门禁。
+
+## v6.0.1-Loon.1 (2026-07-10)
+
+- FIX#174：超出 CDN 单文件预算的广告融合段拆为 3 个 `[Remote Rule]`，国外网站尾段拆为 2 个；每个远程文本分片不超过 18 MiB。
+- SEMANTICS：分片保留原 tag 对应策略和顺序，不改变 Loon 的最终分流优先级。
+
+## v6.0.0-Loon.1 (2026-07-09)
+
+- FUSED-RULESETS：迁移到 68 个融合 `[Remote Rule]`，保留必要本地端口/兜底规则。
+- META：跟随 Clash Party v6.0.0 更新版本元数据；策略组保持不变。
+
+## v5.4.39-Loon.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Loon 不支持 Mihomo `.mrs` rule-provider；规则语义延续 v5.4.38-Loon.1。
+
+## v5.4.38-Loon.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：`[Remote Rule]` 新增 13 个仓库维护的 supplemental 规则集，替代主规则零星直写。
+- SYNC：版本元数据同步 Clash Party v5.4.38。
+
+## v5.4.37-Loon.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Loon 使用 `dns-server` / `doh-server` / `[Host]` 语法，没有 Mihomo `nameserver-policy` 同字段面；规则与 DNS 语义不变。
+
+## v5.4.36-Loon.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：同步删除 22 条经逐条确认的冗余 `DOMAIN` / `DOMAIN-SUFFIX` 规则，远程规则集保持不变。
+- AI / Binance / Microsoft login 候选因不同策略 `.mrs` 前置阻断，继续保留。
+
+## v5.4.35-Loon.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：删除 5 个已被前序同目标规则覆盖的 Remote Rule：Marketing、EncoreTVB、FindMy、WildRift、AcFun。
+- CLEAN#170-DIRECT：删除 3 条已被前置 Douyin 国内流媒体守卫同目标覆盖的后置直写规则：`douyin.com`、`douyinpic.com`、`douyinvod.com`。
+- `[Remote Rule]` 实测数 288 → 283；Loon 专属 `DEST-PORT` / 分段规则语义不变。
+
+## v5.4.34-Loon.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 blackmatrix7 Loon `GaoDe.list` Remote Rule，归入 `🏠 国内网站`。
+- 顺序保持在广告/威胁规则之后、国外网站兜底之前，修复 `webapi.amap.com` 高德 API 误走国外的风险。
+
+## v5.4.33-Loon.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：新增 VPSDance Loon `coding.list` Remote Rule，归入 `🤖 AI 服务`。
+
+## v5.4.32-Loon.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：`[Remote Rule]` 与 `[Rule]` 两处国内游戏段均前置到国外游戏段之前，保持 Loon 私有语法下的首匹配优先级。
+- 文件头与 README 对齐 Clash Party v5.4.32。
+
+## v5.4.31-Loon.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：新增抖音 Web 国内流媒体前置规则，`douyin.com` / `zjcdn.com` 等域名先于 TikTok 和国外规则集命中 `📺 国内流媒体`。
+- 文件头与 README 对齐 Clash Party v5.4.31。
+
+## v5.4.30-Loon.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `🔍 Google 服务` 策略组，插入在 `🔧 工具与服务` 之前。
+- Google Search / Drive / Earth / Google / Scholar 规则集改投新组；工具组保留非 Google 搜索和开发者服务。
+
+## v5.4.29-Loon.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：22 个区域 `url-test` 组 `interval=180 -> interval=300`。
+- README 的 Loon 区域组示例同步改为 `interval=300,tolerance=50`。
+- 规则、Remote Filter 与业务组候选不变。
+
+## v5.4.27-Loon.1 (2026-06-07)
+
+- ★ CLEAN#165：同步清理 7 条已由 `[Remote Rule]` 覆盖的本地直写域名（Claude / PayPal / HBO / Hulu / Xbox）；删除后仍命中同策略组。
+
+## v5.4.26-Loon.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞——szkane `AiDomain.list` 的 `DOMAIN-KEYWORD,copilot` 子串会把它误吞到 `🤖 AI 服务`（国外代理）导致对话报错；在 [Rule] 段 szkane AiDomain 规则集之前前置 `DOMAIN-SUFFIX,copilot.tencent.com,🏠 国内网站`（与既有 RustDesk 防吞守卫并置）。基线 Clash Party v5.4.26。
+
+## v5.4.25-Loon.1 (2026-06-04)
+
+- ★ SYNC：产物头部版本和基线声明对齐 Clash Party v5.4.25；规则语义延续 v5.4.23-Loon.2，无新增 Loon 专属规则变更。
+
 ## v5.4.23-Loon.2 (2026-06-02)
 
 - ★ FIX#162：修复 Loon 远程规则列表加载失败风险：

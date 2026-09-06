@@ -1,48 +1,102 @@
 #!/bin/sh
 # ═══════════════════════════════════════════════════════════════════════════
-# Smart-Config-Kit for Passwall / Passwall2 — UCI batch helper
-# Version: v5.4.24-pw2.1 | Build 2026-06-03
+# Smart-Config-Kit for Passwall2 — fused UCI batch helper
+# Version: v6.0.13-pw2.4 | Build 2026-09-03 | Baseline: Clash Party v6.0.13
 #
-# 用途：一次性在 Passwall2 中创建 32 条 shunt rule（含域名列表 + IP 列表），
-#       每条目标节点留空（NEED_CONFIG），用户之后到 LuCI 里手工选节点。
+# 用途：一次性在 Passwall2 中创建 69 条 fused shunt rule。
+#       每条规则只引用 rulesets/generated/fused/sing-box/*.srs，不再维护手写域名/IP 展平列表。
+#       目标节点留空，用户之后到 LuCI 里给每条 rule 选择节点/负载均衡组。
 #
-# 变更：v5.4.23-pw2.2 — 音乐流媒体：移除 tidal/deezer/soundcloud/pandora 冗余 domain 规则（已由 rule-set 覆盖）
-# 变更：v5.4.23-pw2.1 — FIX#161：27-cn-site.list 增 zhimg.com / zhihu.co 直连（知乎图片 CDN + 短链）
-# 变更：v5.4.22-pw2.1 — N/A#1 QUIC 精细化：Passwall2 不承载 QUIC 阻断，仅版本对齐；v5.4.21: #4/#6
-# 变更：v5.4.19-pw2.1 — 借鉴 Proxy-override #2：27-cn-site.list 增国内推送 SDK(jpush/umeng) + 前端 CDN(baomitu/bootcss/staticfile/upaiyun) 直连
-# 变更：v5.4.17-pw2.1 — 跟随 Clash Party v5.4.17 记录 DNS split-bootstrap；Passwall2 shunt_rules 不承载 DNS
-# 变更：v5.4.16-pw2.1 — Paddle 许可/支付链路加入金融支付；Passwall2 不消费 anti-AD 远程源
-# 变更：v5.4.15-pw2.1 — 新增 GEOSITE 覆盖台账；Passwall2 仍为降级参考，不消费 Sukka phishing 源
-# 变更：v5.4.14-pw2.1 — 记录 Cloudflare R2 存储域误拦截修复；Passwall2 不消费 Sukka phishing 源，国外网站列表显式补齐 domain:cloudflarestorage.com
-# 变更：v5.4.13-pw2.1 — 跟随基线记录 STUN/TURN 端口修复；Passwall2 shunt_rules 无端口分流字段，语义不适用
-# 变更：v5.3.0-pw2.4 — 修复流媒体 .list 文件注释（Passwall → Passwall2）
-#   • 8 个流媒体 .list 文件（09~16）第 5 行注释从 "Passwall LuCI" 修正为 "Passwall2 LuCI"
-# 变更：v5.3.0-pw2.3 — 跟随基线将流媒体重组为按平台分组
-#   • 移除 📺 东南亚流媒体（合并到 🌐 其他国外流媒体）
-#   • 移除 🇺🇸 美国流媒体（拆分为 7 个平台组 + 🌐 其他国外流媒体）
-#   • 新增 8 个平台流媒体组：Netflix / Disney+ / HBO/Max / Hulu /
-#     Prime Video / YouTube / 音乐流媒体 / 其他国外流媒体
-#   • 规则数从 25 条扩展为 32 条
-#
-# 备注：Passwall 和 Passwall2 是 Openwrt-Passwall 组织（原 xiaorouji 个人仓库迁入）并行维护的两款插件，UCI key 不同
-#       （passwall vs passwall2）。本脚本默认操作 Passwall2；若你用 Passwall，
-#       把 CONFIG_NAME 从 "passwall2" 改为 "passwall" 即可——规则语法完全相同。
-#
-# 用法（路径里的 ( ) 是 shell 语法 token，必须加引号）：
-#   1. scp 'Passwall2(xray+sing-box)-apply.sh' root@192.168.1.1:/tmp/
-#   2. ssh root@192.168.1.1
-#   3. sh '/tmp/Passwall2(xray+sing-box)-apply.sh'
-#   4. LuCI → Passwall2 → 分流控制 → 逐条给每个 shunt rule 指定目标节点
-#
-# ⚠️  警告：
-#   • 本脚本在 ImmortalWrt / OpenWrt 官方源的 Passwall2 上测过
-#   • 运行前建议备份: cp /etc/config/passwall2 /etc/config/passwall2.bak
-#   • 运行会 append 32 条新规则，不会删除既有的（重复运行会产生副本）
+# 生成：node tools/generate-fused-fallback-artifacts.js
+# 变更历史：见 Passwall2/CHANGELOG.md
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -e
 
 CONFIG_NAME="passwall2"
+VERSION_TAG="v6.0.13-pw2.4"
+MODE="${1:---replace}"
+
+case "${MODE}" in
+  --replace|'')
+    MODE="--replace"
+    ;;
+  --append)
+    ;;
+  *)
+    echo "Usage: $0 [--replace|--append]" >&2
+    exit 2
+    ;;
+esac
+
+is_scki_remark() {
+  case "$1" in
+    scki-fused-*) return 0 ;;
+  esac
+  printf '%s\n' \
+    "🛑 广告拦截" \
+    "🤖 AI 服务" \
+    "💰 加密货币" \
+    "🏦 金融支付" \
+    "💬 即时通讯" \
+    "📱 社交媒体" \
+    "🎵 TikTok" \
+    "🧑‍💼 会议协作" \
+    "📺 国内流媒体" \
+    "🎥 Netflix" \
+    "🎬 Disney+" \
+    "📡 HBO/Max" \
+    "📺 Hulu" \
+    "🎬 Prime Video" \
+    "📹 YouTube" \
+    "🎵 音乐流媒体" \
+    "🌐 其他国外流媒体" \
+    "🇭🇰 香港流媒体" \
+    "🇹🇼 台湾流媒体" \
+    "🇯🇵 日韩流媒体" \
+    "🇪🇺 欧洲流媒体" \
+    "🕹️ 国内游戏" \
+    "🎮 国外游戏" \
+    "Ⓜ️ 微软服务" \
+    "🍎 苹果服务" \
+    "📥 下载更新" \
+    "🛰️ BT/PT Tracker" \
+    "🏠 国内网站" \
+    "🚫 受限网站" \
+    "🌐 国外网站" \
+    "🔍 Google 服务" \
+    "🔧 工具与服务" \
+    "🐟 漏网之鱼" \
+    | grep -Fqx "$1"
+}
+
+cleanup_existing_scki_rules() {
+  removed=0
+  for section in $(uci show "${CONFIG_NAME}" | sed -n "s/^${CONFIG_NAME}\.\([^.=]*\)=shunt_rules$/\1/p"); do
+    remarks="$(uci -q get "${CONFIG_NAME}.${section}.remarks" || true)"
+    if is_scki_remark "${remarks}"; then
+      uci delete "${CONFIG_NAME}.${section}"
+      removed=$((removed + 1))
+    fi
+  done
+  if [ "${removed}" -gt 0 ]; then
+    echo "已删除旧 Smart-Config-Kit shunt rules: ${removed}"
+  fi
+}
+
+add_fused_shunt_rule() {
+  remarks="$1"
+  url="$2"
+  has_ip="$3"
+  SEC="$(uci add "${CONFIG_NAME}" shunt_rules)"
+  uci set "${CONFIG_NAME}".${SEC}.remarks="${remarks}"
+  uci add_list "${CONFIG_NAME}".${SEC}.domain_list="rule-set:remote:${url}"
+  if [ "${has_ip}" = "1" ]; then
+    uci add_list "${CONFIG_NAME}".${SEC}.ip_list="rule-set:remote:${url}"
+  fi
+  uci set "${CONFIG_NAME}".${SEC}.network='tcp,udp'
+  # Passwall2 在 LuCI 中设置统一 node。
+}
 
 if ! command -v uci >/dev/null 2>&1; then
   echo "ERROR: uci 命令不存在，本脚本只能在 OpenWrt 路由器上运行" >&2
@@ -55,409 +109,224 @@ if [ ! -f "/etc/config/${CONFIG_NAME}" ]; then
 fi
 
 echo "建议先备份: cp /etc/config/${CONFIG_NAME} /etc/config/${CONFIG_NAME}.$(date +%s).bak"
-echo "按 Ctrl+C 取消，回车继续..."
-read _
+echo "运行模式: ${MODE}（--replace 会删除旧 Smart-Config-Kit 规则；--append 会追加）"
+if [ -t 0 ]; then
+  echo "按 Ctrl+C 取消，回车继续..."
+  read _
+fi
 
-echo "开始创建 32 条 shunt rule..."
+if [ "${MODE}" = "--replace" ]; then
+  cleanup_existing_scki_rules
+fi
 
-# [01] 🛑 广告拦截
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🛑 广告拦截'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:category-ads-all'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+echo "开始创建 69 条 fused shunt rule..."
 
-# [02] 🤖 AI 服务
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🤖 AI 服务'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:openai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:anthropic'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:gemini'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:copilot'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:bard'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:perplexity'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:huggingface'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cursor.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:v0.dev'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:character.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mistral.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cohere.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cohere.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:replicate.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:together.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:runpod.io'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:openrouter.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:suno.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:suno.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:midjourney.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:pi.ai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:inflection.ai'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [001] scki-fused-001-direct | DIRECT
+add_fused_shunt_rule 'scki-fused-001-direct | DIRECT' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-001-direct.srs?scki=v6.0.13' '0'
 
-# [03] 💰 加密货币
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='💰 加密货币'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:cryptocurrency'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:binance'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:tradingview.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:coinglass.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:coinmarketcap.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:coingecko.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [002] scki-fused-002-intl-site | 🌐 国外网站
+add_fused_shunt_rule 'scki-fused-002-intl-site | 🌐 国外网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-002-intl-site.srs?scki=v6.0.13' '0'
 
-# [04] 🏦 金融支付
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🏦 金融支付'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:paypal'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:stripe'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:paddle.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:wise.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:revolut.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:visa.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mastercard.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:amex.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [003] scki-fused-003-payments | 🏦 金融支付
+add_fused_shunt_rule 'scki-fused-003-payments | 🏦 金融支付' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-003-payments.srs?scki=v6.0.13' '0'
 
-# [05] 💬 即时通讯
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='💬 即时通讯'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:telegram'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:discord'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:whatsapp'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:line'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:signal'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:kakao'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:kakao.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:kakaocorp.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:kakaotalk.com'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:telegram'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [004] scki-fused-004-ai | 🤖 AI 服务
+add_fused_shunt_rule 'scki-fused-004-ai | 🤖 AI 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-004-ai.srs?scki=v6.0.13' '0'
 
-# [06] 📱 社交媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📱 社交媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:twitter'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:facebook'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:instagram'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:reddit'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:pinterest'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:linkedin'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:snap'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:twitter'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:facebook'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [005] scki-fused-005-cnmedia | 📺 国内流媒体
+add_fused_shunt_rule 'scki-fused-005-cnmedia | 📺 国内流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-005-cnmedia.srs?scki=v6.0.13' '0'
 
-# [06b] 🎵 TikTok
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎵 TikTok'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:tiktok'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [006] scki-fused-006-ad | 🛑 广告拦截
+add_fused_shunt_rule 'scki-fused-006-ad | 🛑 广告拦截' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-006-ad.srs?scki=v6.0.13' '1'
 
-# [07] 🧑‍💼 会议协作
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🧑‍💼 会议协作'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:zoom'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:teams'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:slack'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:notion'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:atlassian'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:rustdesk.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:meet.google.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [007] scki-fused-007-cn-site | 🏠 国内网站
+add_fused_shunt_rule 'scki-fused-007-cn-site | 🏠 国内网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-007-cn-site.srs?scki=v6.0.13' '0'
 
-# [08] 🎥 Netflix
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎥 Netflix'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:netflix'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:netflix'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [008] scki-fused-008-direct | DIRECT
+add_fused_shunt_rule 'scki-fused-008-direct | DIRECT' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-008-direct.srs?scki=v6.0.13' '1'
 
-# [09] 🎬 Disney+
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎬 Disney+'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:disney'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [009] scki-fused-009-work | 🧑‍💼 会议协作
+add_fused_shunt_rule 'scki-fused-009-work | 🧑‍💼 会议协作' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-009-work.srs?scki=v6.0.13' '0'
 
-# [10] 📡 HBO/Max
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📡 HBO/Max'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:hbo'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:max.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:hbomax.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [010] scki-fused-010-crypto | 💰 加密货币
+add_fused_shunt_rule 'scki-fused-010-crypto | 💰 加密货币' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-010-crypto.srs?scki=v6.0.13' '0'
 
-# [11] 📺 Hulu
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📺 Hulu'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:hulu'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [011] scki-fused-011-gfw | 🚫 受限网站
+add_fused_shunt_rule 'scki-fused-011-gfw | 🚫 受限网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-011-gfw.srs?scki=v6.0.13' '0'
 
-# [12] 🎬 Prime Video
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎬 Prime Video'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:primevideo'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [012] scki-fused-012-youtube | 📹 YouTube
+add_fused_shunt_rule 'scki-fused-012-youtube | 📹 YouTube' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-012-youtube.srs?scki=v6.0.13' '0'
 
-# [13] 📹 YouTube
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📹 YouTube'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:youtube'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [013] scki-fused-013-cn-site | 🏠 国内网站
+add_fused_shunt_rule 'scki-fused-013-cn-site | 🏠 国内网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-013-cn-site.srs?scki=v6.0.13' '0'
 
-# [14] 🎵 音乐流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎵 音乐流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:spotify'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [014] scki-fused-014-ai | 🤖 AI 服务
+add_fused_shunt_rule 'scki-fused-014-ai | 🤖 AI 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-014-ai.srs?scki=v6.0.13' '0'
 
-# [15] 🇭🇰 香港流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🇭🇰 香港流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:mytvsuper'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mytvsuper.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:now.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:viu.tv'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:encoretvb.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:rthk.hk'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [015] scki-fused-015-google | 🔍 Google 服务
+add_fused_shunt_rule 'scki-fused-015-google | 🔍 Google 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-015-google.srs?scki=v6.0.13' '0'
 
-# [16] 🇹🇼 台湾流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🇹🇼 台湾流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:bahamut'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:bahamut.com.tw'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:hinet.net'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:kktv.me'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:litv.tv'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:hamivideo.hinet.net'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:friday.tw'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [016] scki-fused-016-work | 🧑‍💼 会议协作
+add_fused_shunt_rule 'scki-fused-016-work | 🧑‍💼 会议协作' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-016-work.srs?scki=v6.0.13' '0'
 
-# [17] 🇯🇵 日韩流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🇯🇵 日韩流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:abema'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:niconico'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:dazn.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:dmm.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:tv-tokyo.co.jp'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:tver.jp'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:rakuten.tv'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [017] scki-fused-017-ai | 🤖 AI 服务
+add_fused_shunt_rule 'scki-fused-017-ai | 🤖 AI 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-017-ai.srs?scki=v6.0.13' '1'
 
-# [18] 🇪🇺 欧洲流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🇪🇺 欧洲流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:bbc'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:itv.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:channel4.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:my5.tv'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:sky.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:skygo.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:britbox.co.uk'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [018] scki-fused-018-intl-site | 🌐 国外网站
+add_fused_shunt_rule 'scki-fused-018-intl-site | 🌐 国外网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-018-intl-site.srs?scki=v6.0.13' '0'
 
-# [19] 🌐 其他国外流媒体（合并自原东南亚流媒体 + 美国流媒体余项）
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🌐 其他国外流媒体'
-# 原东南亚流媒体
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:viu'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:iq.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:wetv.vip'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:vidio.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:iqiyiintl.com'
-# 其他国外流媒体（原美国流媒体剩余项）
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:paramountplus.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:peacocktv.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:twitch.tv'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:crunchyroll.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:vrv.co'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [019] scki-fused-019-im | 💬 即时通讯
+add_fused_shunt_rule 'scki-fused-019-im | 💬 即时通讯' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-019-im.srs?scki=v6.0.13' '0'
 
-# [20] 🔧 工具与服务（新设，合并自原搜索引擎 + 开发者服务）
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🔧 工具与服务'
-# 原 🔍 搜索引擎
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:google'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:bing'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:duckduckgo'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:yandex'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:scholar.google.com'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:google'
-# 原 📟 开发者服务
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:github'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:gitlab'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:docker'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:npmjs'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:pypi'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:python'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:jetbrains.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:stackoverflow.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:stackexchange.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [020] scki-fused-020-work | 🧑‍💼 会议协作
+add_fused_shunt_rule 'scki-fused-020-work | 🧑‍💼 会议协作' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-020-work.srs?scki=v6.0.13' '0'
 
-# [21] Ⓜ️ 微软服务
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='Ⓜ️ 微软服务'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:microsoft'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:onedrive'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:office.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:live.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:microsoftedge.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [021] scki-fused-021-download | 📥 下载更新
+add_fused_shunt_rule 'scki-fused-021-download | 📥 下载更新' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-021-download.srs?scki=v6.0.13' '1'
 
-# [22] 🍎 苹果服务
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🍎 苹果服务'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:apple'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:icloud'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:appstore.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mzstatic.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:itunes.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:applemusic.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:apple-dns.net'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [022] scki-fused-022-google | 🔍 Google 服务
+add_fused_shunt_rule 'scki-fused-022-google | 🔍 Google 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-022-google.srs?scki=v6.0.13' '1'
 
-# [23] 📥 下载更新
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📥 下载更新'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:dl.google.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:play.googleapis.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:msftconnecttest.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:windowsupdate.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cdn-apple.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:ubuntu.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mozilla.org'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:apkpure.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [023] scki-fused-023-tools | 🔧 工具与服务
+add_fused_shunt_rule 'scki-fused-023-tools | 🔧 工具与服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-023-tools.srs?scki=v6.0.13' '0'
 
-# [24] 🛰️ BT/PT Tracker
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🛰️ BT/PT Tracker'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:private-tracker'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:opentrackr.org'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:openbittorrent.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:nyaa.si'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [024] scki-fused-024-ai | 🤖 AI 服务
+add_fused_shunt_rule 'scki-fused-024-ai | 🤖 AI 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-024-ai.srs?scki=v6.0.13' '1'
 
-# [25] 🚫 受限网站
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🚫 受限网站'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:gfw'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:greatfire'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [025] scki-fused-025-google | 🔍 Google 服务
+add_fused_shunt_rule 'scki-fused-025-google | 🔍 Google 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-025-google.srs?scki=v6.0.13' '0'
 
-# [26] 🎮 国外游戏
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🎮 国外游戏'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:steam'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:epicgames'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:playstation'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:xbox'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:nintendo'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:riotgames.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:ea.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:blizzard.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:hoyoverse.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mihoyo.com'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [026] scki-fused-026-ai | 🤖 AI 服务
+add_fused_shunt_rule 'scki-fused-026-ai | 🤖 AI 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-026-ai.srs?scki=v6.0.13' '1'
 
-# [27] 🌐 国外网站（合并自原邮件服务 + 云与CDN）
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🌐 国外网站'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:geolocation-!cn'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cnn.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:nytimes.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:bloomberg.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:wikipedia.org'
-# 合并自原 📧 邮件服务
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:gmail'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:outlook'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:protonmail'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:fastmail.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:tuta.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:mail.ru'
-# 合并自原 ☁️ 云与CDN
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:cloudflare'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cloudflarestorage.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:fastly'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:akamai'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:jsdelivr.net'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:cloudfront.net'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:cloudflare'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:fastly'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [027] scki-fused-027-crypto | 💰 加密货币
+add_fused_shunt_rule 'scki-fused-027-crypto | 💰 加密货币' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-027-crypto.srs?scki=v6.0.13' '0'
 
-# [28] 🕹️ 国内游戏
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🕹️ 国内游戏'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:steamcn'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:wanmei.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:majsoul.com'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='domain:battlenet.com.cn'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [028] scki-fused-028-payments | 🏦 金融支付
+add_fused_shunt_rule 'scki-fused-028-payments | 🏦 金融支付' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-028-payments.srs?scki=v6.0.13' '0'
 
-# [29] 📺 国内流媒体
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='📺 国内流媒体'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:bilibili'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:iqiyi'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:youku'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:tencentvideo'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:mgtv'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:douyin'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:netease-music'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:qqmusic'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [029] scki-fused-029-microsoft | Ⓜ️ 微软服务
+add_fused_shunt_rule 'scki-fused-029-microsoft | Ⓜ️ 微软服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-029-microsoft.srs?scki=v6.0.13' '0'
 
-# [30] 🏠 国内网站
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🏠 国内网站'
-uci add_list ${CONFIG_NAME}.${SEC}.domain_list='geosite:cn'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:cn'
-uci add_list ${CONFIG_NAME}.${SEC}.ip_list='geoip:private'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [030] scki-fused-030-intl-site | 🌐 国外网站
+add_fused_shunt_rule 'scki-fused-030-intl-site | 🌐 国外网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-030-intl-site.srs?scki=v6.0.13' '0'
 
-# [31] 🐟 漏网之鱼 FINAL
-SEC="$(uci add ${CONFIG_NAME} shunt_rules)"
-uci set ${CONFIG_NAME}.${SEC}.remarks='🐟 漏网之鱼 FINAL'
-uci set ${CONFIG_NAME}.${SEC}.network='tcp,udp'
-# uci set ${CONFIG_NAME}.${SEC}.node='NEED_CONFIG_IN_LUCI'
+# [031] scki-fused-031-direct | DIRECT
+add_fused_shunt_rule 'scki-fused-031-direct | DIRECT' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-031-direct.srs?scki=v6.0.13' '0'
 
-uci commit ${CONFIG_NAME}
+# [032] scki-fused-032-im | 💬 即时通讯
+add_fused_shunt_rule 'scki-fused-032-im | 💬 即时通讯' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-032-im.srs?scki=v6.0.13' '1'
 
-echo "✓ 32 条 shunt rule 创建完成。"
-echo "下一步："
-echo "  1. LuCI → Passwall2 → 分流控制 → 逐条为每个 rule 指定目标节点"
-echo "  2. 确认规则顺序：#01 广告拦截在最前；#29-#31（受限/国外/FINAL）保持在末尾"
-echo "  3. 重启 Passwall2: /etc/init.d/passwall2 restart"
+# [033] scki-fused-033-social | 📱 社交媒体
+add_fused_shunt_rule 'scki-fused-033-social | 📱 社交媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-033-social.srs?scki=v6.0.13' '1'
+
+# [034] scki-fused-034-cn-site | 🏠 国内网站
+add_fused_shunt_rule 'scki-fused-034-cn-site | 🏠 国内网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-034-cn-site.srs?scki=v6.0.13' '0'
+
+# [035] scki-fused-035-social | 📱 社交媒体
+add_fused_shunt_rule 'scki-fused-035-social | 📱 社交媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-035-social.srs?scki=v6.0.13' '0'
+
+# [036] scki-fused-036-work | 🧑‍💼 会议协作
+add_fused_shunt_rule 'scki-fused-036-work | 🧑‍💼 会议协作' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-036-work.srs?scki=v6.0.13' '1'
+
+# [037] scki-fused-037-direct | DIRECT
+add_fused_shunt_rule 'scki-fused-037-direct | DIRECT' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-037-direct.srs?scki=v6.0.13' '0'
+
+# [038] scki-fused-038-cnmedia | 📺 国内流媒体
+add_fused_shunt_rule 'scki-fused-038-cnmedia | 📺 国内流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-038-cnmedia.srs?scki=v6.0.13' '0'
+
+# [039] scki-fused-039-tiktok | 🎵 TikTok
+add_fused_shunt_rule 'scki-fused-039-tiktok | 🎵 TikTok' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-039-tiktok.srs?scki=v6.0.13' '0'
+
+# [040] scki-fused-040-youtube | 📹 YouTube
+add_fused_shunt_rule 'scki-fused-040-youtube | 📹 YouTube' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-040-youtube.srs?scki=v6.0.13' '0'
+
+# [041] scki-fused-041-netflix | 🎥 Netflix
+add_fused_shunt_rule 'scki-fused-041-netflix | 🎥 Netflix' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-041-netflix.srs?scki=v6.0.13' '1'
+
+# [042] scki-fused-042-disney | 🎬 Disney+
+add_fused_shunt_rule 'scki-fused-042-disney | 🎬 Disney+' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-042-disney.srs?scki=v6.0.13' '0'
+
+# [043] scki-fused-043-hbo-max | 📡 HBO/Max
+add_fused_shunt_rule 'scki-fused-043-hbo-max | 📡 HBO/Max' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-043-hbo-max.srs?scki=v6.0.13' '0'
+
+# [044] scki-fused-044-hulu | 📺 Hulu
+add_fused_shunt_rule 'scki-fused-044-hulu | 📺 Hulu' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-044-hulu.srs?scki=v6.0.13' '0'
+
+# [045] scki-fused-045-prime-video | 🎬 Prime Video
+add_fused_shunt_rule 'scki-fused-045-prime-video | 🎬 Prime Video' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-045-prime-video.srs?scki=v6.0.13' '1'
+
+# [046] scki-fused-046-music | 🎵 音乐流媒体
+add_fused_shunt_rule 'scki-fused-046-music | 🎵 音乐流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-046-music.srs?scki=v6.0.13' '1'
+
+# [047] scki-fused-047-stream-hk | 🇭🇰 香港流媒体
+add_fused_shunt_rule 'scki-fused-047-stream-hk | 🇭🇰 香港流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-047-stream-hk.srs?scki=v6.0.13' '1'
+
+# [048] scki-fused-048-stream-tw | 🇹🇼 台湾流媒体
+add_fused_shunt_rule 'scki-fused-048-stream-tw | 🇹🇼 台湾流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-048-stream-tw.srs?scki=v6.0.13' '0'
+
+# [049] scki-fused-049-stream-jpkr | 🇯🇵 日韩流媒体
+add_fused_shunt_rule 'scki-fused-049-stream-jpkr | 🇯🇵 日韩流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-049-stream-jpkr.srs?scki=v6.0.13' '1'
+
+# [050] scki-fused-050-stream-eu | 🇪🇺 欧洲流媒体
+add_fused_shunt_rule 'scki-fused-050-stream-eu | 🇪🇺 欧洲流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-050-stream-eu.srs?scki=v6.0.13' '0'
+
+# [051] scki-fused-051-stream-other | 🌐 其他国外流媒体
+add_fused_shunt_rule 'scki-fused-051-stream-other | 🌐 其他国外流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-051-stream-other.srs?scki=v6.0.13' '1'
+
+# [052] scki-fused-052-tools | 🔧 工具与服务
+add_fused_shunt_rule 'scki-fused-052-tools | 🔧 工具与服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-052-tools.srs?scki=v6.0.13' '0'
+
+# [053] scki-fused-053-google | 🔍 Google 服务
+add_fused_shunt_rule 'scki-fused-053-google | 🔍 Google 服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-053-google.srs?scki=v6.0.13' '0'
+
+# [054] scki-fused-054-tools | 🔧 工具与服务
+add_fused_shunt_rule 'scki-fused-054-tools | 🔧 工具与服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-054-tools.srs?scki=v6.0.13' '1'
+
+# [055] scki-fused-055-microsoft | Ⓜ️ 微软服务
+add_fused_shunt_rule 'scki-fused-055-microsoft | Ⓜ️ 微软服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-055-microsoft.srs?scki=v6.0.13' '0'
+
+# [056] scki-fused-056-apple | 🍎 苹果服务
+add_fused_shunt_rule 'scki-fused-056-apple | 🍎 苹果服务' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-056-apple.srs?scki=v6.0.13' '1'
+
+# [057] scki-fused-057-download | 📥 下载更新
+add_fused_shunt_rule 'scki-fused-057-download | 📥 下载更新' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-057-download.srs?scki=v6.0.13' '1'
+
+# [058] scki-fused-058-tracker | 🛰️ BT/PT Tracker
+add_fused_shunt_rule 'scki-fused-058-tracker | 🛰️ BT/PT Tracker' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-058-tracker.srs?scki=v6.0.13' '1'
+
+# [059] scki-fused-059-gfw | 🚫 受限网站
+add_fused_shunt_rule 'scki-fused-059-gfw | 🚫 受限网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-059-gfw.srs?scki=v6.0.13' '1'
+
+# [060] scki-fused-060-game-cn | 🕹️ 国内游戏
+add_fused_shunt_rule 'scki-fused-060-game-cn | 🕹️ 国内游戏' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-060-game-cn.srs?scki=v6.0.13' '0'
+
+# [061] scki-fused-061-game-intl | 🎮 国外游戏
+add_fused_shunt_rule 'scki-fused-061-game-intl | 🎮 国外游戏' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-061-game-intl.srs?scki=v6.0.13' '1'
+
+# [062] scki-fused-062-intl-site | 🌐 国外网站
+add_fused_shunt_rule 'scki-fused-062-intl-site | 🌐 国外网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-062-intl-site.srs?scki=v6.0.13' '1'
+
+# [063] scki-fused-063-payments | 🏦 金融支付
+add_fused_shunt_rule 'scki-fused-063-payments | 🏦 金融支付' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-063-payments.srs?scki=v6.0.13' '0'
+
+# [064] scki-fused-064-cnmedia | 📺 国内流媒体
+add_fused_shunt_rule 'scki-fused-064-cnmedia | 📺 国内流媒体' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-064-cnmedia.srs?scki=v6.0.13' '1'
+
+# [065] scki-fused-065-cn-site | 🏠 国内网站
+add_fused_shunt_rule 'scki-fused-065-cn-site | 🏠 国内网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-065-cn-site.srs?scki=v6.0.13' '1'
+
+# [066] scki-fused-066-direct | DIRECT
+add_fused_shunt_rule 'scki-fused-066-direct | DIRECT' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-066-direct.srs?scki=v6.0.13' '0'
+
+# [067] scki-fused-067-cn-site | 🏠 国内网站
+add_fused_shunt_rule 'scki-fused-067-cn-site | 🏠 国内网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-067-cn-site.srs?scki=v6.0.13' '0'
+
+# [068] scki-fused-068-intl-site | 🌐 国外网站
+add_fused_shunt_rule 'scki-fused-068-intl-site | 🌐 国外网站' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-068-intl-site.srs?scki=v6.0.13' '1'
+
+# [069] scki-fused-070-netflix | 🎥 Netflix
+add_fused_shunt_rule 'scki-fused-070-netflix | 🎥 Netflix' 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/sing-box/scki-fused-070-netflix.srs?scki=v6.0.13' '1'
+
+uci commit "${CONFIG_NAME}"
+echo "完成：已写入 69 条 Smart-Config-Kit fused shunt rule。请到 LuCI 分流控制中为各规则选择目标节点。"

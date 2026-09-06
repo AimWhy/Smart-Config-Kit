@@ -1,11 +1,12 @@
-# Quantumult X 使用教程（对齐 Clash Party v5.4.23）
+# Quantumult X 使用教程（对齐 Clash Party v6.0.13）
 
 > 目录简介：这里维护 Quantumult X iOS 配置和导入教程，按 QX 的 policy/filter 语法对齐 Clash Party 基线。
 >
 > 配置文件：`Quantumult X/QuantumultX.conf`
-> 版本：**v5.4.23-QX.2**（Build 2026-06-02，详见 `Quantumult X/CHANGELOG.md`；修复 #162 失效远程规则 URL）
+> 版本：**v6.0.13-QX.5**（Build 2026-09-03，详见 `Quantumult X/CHANGELOG.md`；跟随 Clash Party v6.0.13 基线；72 个源语义段对应 69 个非空 remote filter）
 > 目标：**Quantumult X iOS（App Store 付费正版）**
-> 架构：22 区域 `url-latency-benchmark` 组（11 全部 + 11 家宽）+ 32 业务 `static` 组 + 286 filter_remote + 568 filter_local 规则
+> 架构：22 区域 `url-latency-benchmark` 组（11 全部 + 11 家宽）+ 33 业务 `static` 组 + 64 个 `filter_remote` + 12 条必要 `filter_local`
+> 节点命名兼容：当订阅解析器把名称写入节点 tag 时，server-tag-regex 已兼容 yun hk01 / yun us01 / yun jp01 / yun sg01 / yun tw01。
 
 <sub>💖 [支持本项目](../docs/donate.md) · ⭐ [Star](https://github.com/ivansolis1989/Smart-Config-Kit) · 🐛 [Issue](https://github.com/ivansolis1989/Smart-Config-Kit/issues)</sub>
 
@@ -45,12 +46,12 @@
 
 ### 跑起来验证？
 - 浏览器打开 `https://www.google.com` 能打开
-- QX「策略」面板应看到 54 组（22 url-latency-benchmark + 32 static）
+- QX「策略」面板应看到 55 组（22 url-latency-benchmark + 33 static）
 - QX「日志」面板看 filter_remote 下载成功无 404
 - 额外检查：按根 README 的 [导入后 60 秒验证清单](../README.md#-导入后-60-秒验证清单) 确认规则下载、GEOSITE 命中与 anti-ad 误伤白名单。
 
 ### 最常见踩坑
-- ❌ **加了节点但不被 11 区域组识别**：QX 用节点的 **tag 字段**做正则匹配（不是 name！）。确认订阅返回的节点 tag 含 `HK` / `JP` / `US` 等地区关键字。机场的订阅链接加 `&flag=quanx` 后缀通常能让 tag 含地区标识。
+- ❌ **加了节点但不被 11 区域组识别**：QX 用节点的 **tag 字段**做正则匹配（不是 name！）。确认订阅返回的节点 tag 含 HK / JP / US 等地区关键字；hk01 / jp01 / us01 这种小写地区码加编号也支持。机场的订阅链接加 &flag=quanx 后缀通常能让 tag 含地区标识。
 - ❌ **filter_remote 下载一半 404**：先开代理再下配置。
 - ❌ **想导入非标准订阅（vless:// 分享链接列表等）**：`resource_parser_url` 已在 `[general]` 预置 KOP-XIAO 的解析脚本，能吃 vmess/vless/trojan/ss/hysteria base64 订阅。
 - ❌ **想用 MITM 签到脚本**：本配置默认 `[mitm]` 留空。启用步骤：QX → 证书 → 生成 → 信任 → 在 `[rewrite_remote]` 加社区插件（例如 BoxJs），hostname 自动追加到 `[mitm]`。
@@ -115,7 +116,7 @@ QX 从 URL 导入配置（不支持本地文件直接打开）：
 3. 粘贴 URL → 点击 **下载**。
 4. 下载完成后 QX 会自动切换到新配置。
 
-首次启用时 QX 会拉取 **286 个 filter_remote**（blackmatrix7 QX 专用 `.list` 格式），根据网络情况约 **2–5 分钟**。**务必先开代理再下载**。
+首次启用时 QX 会拉取 **280 个 filter_remote**（blackmatrix7 QX 专用 `.list` 格式），根据网络情况约 **2–5 分钟**。**务必先开代理再下载**。
 
 ---
 
@@ -139,7 +140,7 @@ trojan=example.com:443, password=xxx, over-tls=true, tls-host=example.com, tag=H
 ss=example.com:443, method=aes-256-gcm, password=xxx, tag=JP-01
 ```
 
-tag 里最好含地区标识（`HK` / `JP` / `US` 等），让正则能自动归类。
+tag 里最好含地区标识（HK / JP / US 等；也支持 hk01 / jp01 / us01），让正则能自动归类。
 
 ### 方式 C：QX UI 扫码导入
 QX 首页 → ➕ → 扫描 QR / 手动添加。这种方式节点单独管理，不在配置文件里，重装 QX 会丢。
@@ -157,17 +158,17 @@ QX 首页 → ➕ → 扫描 QR / 手动添加。这种方式节点单独管理�
 
 ---
 
-## 四、11 区域 × 32 业务组结构
+## 四、11 区域 × 33 业务组结构
 
 结构与 Surge / Shadowrocket 一致，但 QX 使用自家的 policy 类型名：
 
 ### 11 区域组（QX: `url-latency-benchmark`）
 - 使用 `server-tag-regex=<正则>` 按节点 tag 自动匹配
-- `check-interval=600` 每 10 分钟重测延迟
+- `check-interval=300` 每 5 分钟重测延迟
 - `tolerance=100` ms 防抖
 - 选最低延迟
 
-### 32 业务组（QX: `static`）
+### 33 业务组（QX: `static`）
 - 手动选择候选项（包含 11 区域组 + direct + reject）
 - 首次导入后建议在 QX UI 里逐组指定偏好区域
 
@@ -235,8 +236,8 @@ QX 的真正优势是 **`resource_parser_url`（通用资源解析器）+ `rewri
 
 ## 八、验证
 
-1. QX → **设置** → **配置** → 查看当前配置名称，应显示 `Quantumult X Smart v5.4.23-QX.2`。
-2. **策略（Policy）** 面板应出现 54 组（22 `url-latency-benchmark` + 32 `static`）。
+1. QX → **设置** → **配置** → 查看当前配置名称，应显示 `Quantumult X Smart v6.0.13-QX.5`。
+2. **策略（Policy）** 面板应出现 55 组（22 `url-latency-benchmark` + 32 `static`）。
 3. **日志（Log）** 查看 filter_remote 下载状态，无 404 / timeout 即成功。
 4. 访问测试：
    - `chat.openai.com` → 🤖 AI 服务
@@ -253,7 +254,7 @@ QX 的真正优势是 **`resource_parser_url`（通用资源解析器）+ `rewri
 - 若仍失败，**设置 → 配置 → 一键更新** 强制重新拉取。
 
 ### Q2：节点没被自动聚合到 11 区域组？
-- QX 用 `server-tag-regex` 匹配节点的 tag 字段（不是 name）。确认你订阅返回的节点 tag 里含 `HK` / `JP` / `US` 等地区关键字 + 中文国名。
+- QX 用 server-tag-regex 匹配节点的 tag 字段（不是 name）。确认你订阅返回的节点 tag 里含 HK / JP / US 等地区关键字 + 中文国名；小写地区码加编号（如 hk01）也兼容。
 - 本仓库的 regex 兼容「中文国名 / ISO 国家代码 / IATA 机场代码 / emoji 旗帜」多种标识，覆盖率 > 95%。
 
 ### Q3：想用 QX 的 resource_parser_url 解析非标准订阅？
@@ -275,20 +276,11 @@ QX 的真正优势是 **`resource_parser_url`（通用资源解析器）+ `rewri
 
 ---
 
-## 十、转换脚本（如何自己从 Shadowrocket 重新生成 QX 配置）
+## 十、维护状态
 
-`/tmp/srk_to_qx.py`（仓库内未提交的辅助脚本）可以把 `Shadowrocket/Shadowrocket.conf` 重新生成 QX 配置：
+当前仓库没有提交 `tools/srk_to_qx.py`。`QuantumultX.conf` 作为独立 QX 产物维护，并由 `tools/validate-artifact-contracts.js` 校验组数、DNS 字段、端口规则和基线版本。
 
-```python
-python3 /tmp/srk_to_qx.py
-# 输出:
-# Generated: Quantumult X/QuantumultX.conf
-#   policies: 34
-#   filter_remote: 286
-#   filter_local: 568 rules + 167 comments
-```
-
-转换规则摘要：
+如后续恢复 Shadowrocket → QX 自动转换，转换器至少需要覆盖：
 - `[Proxy Group]` url-test → `[policy]` `url-latency-benchmark`
 - `[Proxy Group]` select → `[policy]` `static`
 - `RULE-SET,<URL>,<POLICY>` → `[filter_remote]` 条目（自动改写 `/rule/Shadowrocket/` → `/rule/QuantumultX/`）

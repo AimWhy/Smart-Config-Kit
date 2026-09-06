@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "rules": [
+    {
+      "domain": [
+        "yt3.googleusercontent.com"
+      ],
+      "domain_suffix": [
+        "youtube.googleapis.com",
+        "youtubeembeddedplayer.googleapis.com",
+        "youtubei.googleapis.com",
+        "youtube-ui.l.google.com",
+        "wide-youtube.l.google.com"
+      ]
+    }
+  ]
+}

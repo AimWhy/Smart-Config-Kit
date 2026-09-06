@@ -5,6 +5,147 @@
 
 ---
 
+## v6.0.13-sing.4 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 fused SRS 增加 `linuxdo.org` domain_suffix 并绑定国内网站出站；`linux.do` 保持 GFW 出站。
+- SYNC：Full JSON 继续使用 69 个 fused SRS、76 个 remote rule_set 与 88 条路由规则。
+
+## v6.0.12-sing.3 (2026-09-01)
+
+- FIX#181-PC：首段 fused SRS 增加 `login.nvidia.cn` 精确域名并绑定 `DIRECT`；其余 NVIDIA 域名仍由下载出站处理。
+- SYNC：Full JSON 保持 69 个 fused SRS、76 个 remote rule_set 与 88 条路由规则。
+
+## v6.0.11-sing.2 (2026-08-22)
+
+- Full JSON 由最终 fused SRS 重生成：Gemini 与 Accademia Gemini 的首命中由 AI 改为 Google，其他 AI 规则保持原有策略和顺序。
+
+## v6.0.10-sing.2 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：Full JSON 与首段 fused SRS 重新生成；两个网易游戏服务主机固定走 `DIRECT`，不继承国内游戏出站选择。
+
+## v6.0.9-sing.1 (2026-07-19)
+
+- Full JSON 重新生成：`api.github.com` 默认进入工具组，原生 `process_name + domain` 规则仅为 `Code Helper` / `Code Helper (Plugin)` 保留 AI 路由。
+
+## v6.0.8-sing.1 (2026-07-15)
+
+- 全量同步国内权威优先级；65 个融合 `.srs` 远程资产使用发布版本缓存键。
+
+## v6.0.7-sing.1 (2026-07-14)
+
+- FIX#176：Full JSON 重新生成，国内域名 SRS 路由在共享 CDN / GeoIP 的国际 SRS fallback 前匹配；通用国际 fallback 独立为后置语义段。
+
+## v6.0.6-sing.1 (2026-07-14)
+
+- DIRECT-WORKPRO-WEB：Full JSON 重新生成，`scki-fused-008-direct` 的原生 SRS 源同时包含 `process_name: WorkPro.exe` 与 `WorkProWebProcess.exe`，Windows / Linux / macOS 进程匹配路径均路由至 direct outbound。
+
+## v6.0.5-sing.1 (2026-07-14)
+
+- DIRECT-WORKPRO：Full JSON 重新生成，scki-fused-008-direct 的原生 SRS 源包含 process_name WorkPro.exe 并路由至 DIRECT；官方字段仅用于 Linux / Windows / macOS。
+
+## v6.0.4-sing.1 (2026-07-13)
+
+- DIRECT-ITWDB：Full JSON 由融合结果重新生成，`scki-fused-008-direct` 的 `.srs` / route 语义包含 `itwdb.com`，覆盖其全部子域名并落到 direct outbound。
+
+## v6.0.3-sing.1 (2026-07-12)
+
+- SYNC：Full JSON 由融合 manifest 重新生成，65 个唯一非空 `.srs`、72 个 remote rule_set（65 fused + 7 runtime GEO）和 82 条 route rule。
+- AI-PRECEDENCE：新增早期 AI guard SRS，ChatGPT 的 Sentry/DataDog telemetry 不会被后续广告规则抢占；OpenAI / oaistatic / Cloudflare 关联域名保持在 AI 路径。
+- BUILD：生成器不再硬编码广告 fused segment ID，按 manifest 的广告策略动态定位，避免插入前置语义段时发生路由引用漂移。
+
+## v6.0.2-sing.1 (2026-07-10)
+
+- SYNC：Full JSON 升级到 Clash Party v6.0.2；113 个 Mihomo bucket provider 按 manifest 合并为 64 个非空、唯一 `.srs`，不再为同一 SRS 建立多个 tag 和重复路由。
+- TARGET-MATERIALIZATION：sing-box headless rule-set 不支持 GEOIP / IP-ASN 字段，因此仅在 sing-box 目标中将这些规则解析为 CIDR；下载失败或空结果直接中止构建。
+- PERF：64 个 `.srs` 聚合约 4.06 MiB；Full JSON 为 71 个 remote rule_set（64 fused + 7 runtime GEO）和 81 条 route rule。
+
+## v6.0.1-sing.1 (2026-07-10)
+
+- SYNC：Full JSON 由生成器重新生成并升级至 Clash Party v6.0.1 基线。
+- DELIVERY：sing-box 继续使用 68 个 `.srs` 融合规则集；Issue #174 的文本规则分片不改变 `.srs` 路径、route 语义或 GEO runtime rule_set。
+
+## v6.0.0-sing.1 (2026-07-09)
+
+- FUSED-RULESETS：生成器基线更新到 Clash Party v6.0.0，将融合 provider 映射到 `rulesets/generated/fused/sing-box/*.srs`。
+- SCALE：Full JSON 当前包含 120 个 route rule_set（113 个融合规则集 + 7 个 GEO runtime rule_set）与 130 条 route rules。
+
+## v5.4.39-sing.1 (2026-07-09)
+
+- SYNC：生成器基线更新到 Clash Party v5.4.39，并重新生成 Full JSON。
+- SCKI-MRS-BRIDGE：SingBox 不消费 Mihomo `.mrs`；生成器改为读取 `rulesets/generated/mihomo-mrs/manifest.json`，把已迁移为 `.mrs` 的 `scki-*` 补充规则回溯到原始 `.list` 并展开为原生 route rules。
+- VERIFY：Full JSON 当前 40 个 remote rule_set、660 条 route rules；Cloudflare R2 与 Douyin / `zjcdn.com` 前置守卫继续位于广告、TikTok 和国外兜底之前。
+
+## v5.4.38-sing.1 (2026-07-09)
+
+- SCKI-SUPPLEMENTAL：生成器会读取 `rulesets/supplemental/clash/*.list` 并展开为 sing-box route rules。
+- SYNC：Full JSON 重新生成，基线更新到 Clash Party v5.4.38。
+
+## v5.4.37-sing.1 (2026-06-29)
+
+- META#170-DNS-POLICY：`SingBox(sing-box)-generator.js` 跟随 Clash Party v5.4.37 更新版本元数据并重新生成 Full JSON。
+- N/A：sing-box 使用原生 `dns.rules` / `dns.servers`，没有 Mihomo `nameserver-policy` 同字段面；现有 `geosite-cn` / `cn-ip` 走 `dns_direct`、最终走 `dns_proxy` 的 DNS 语义不变。
+
+## v5.4.36-sing.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：`SingBox(sing-box)-generator.js` 对齐 Clash Party v5.4.36 并重新生成 Full JSON。
+- route rules 删除 22 条经逐条确认的冗余 domain / domain_suffix 规则，remote rule_set 保持不变。
+
+## v5.4.35-sing.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：`SingBox(sing-box)-generator.js` 跟随 Clash Party v5.4.35 基线重新生成 Full JSON。
+- 说明：被删 8 个上游 provider 均不属于 SingBox remote rule_set 映射输出；后置 Douyin 重复直写规则清理后，route rules 687 → 684。
+
+## v5.4.34-sing.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：`SingBox(sing-box)-generator.js` 跟随 Clash Party v5.4.34，将 MetaCubeX `amap` 映射为 sing-box `amap.srs` rule_set。
+- `SingBox(sing-box)-full.json` 已由 generator 重新生成，`amap` route 位于国外网站 `proxy` 宽兜底之前并输出到 `🏠 国内网站`。
+
+## v5.4.33-sing.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：`SingBox(sing-box)-generator.js` 将 `vpsdance-ai-coding` 映射到 VPSDance `rules/sing-box/coding.json`。
+- Full JSON 已由 generator 重新生成，新增 1 个 source JSON remote rule_set。
+
+## v5.4.32-sing.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：`SingBox(sing-box)-generator.js` 跟随 Clash Party v5.4.32 生成国内游戏 route 早于 HoYoverse / Game / category-games 宽规则的 Full JSON。
+- Full JSON 由 generator 重新生成，保持 meta version/build/baseline 一致。
+
+## v5.4.31-sing.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：`SingBox(sing-box)-generator.js` 跟随 Clash Party v5.4.31 生成抖音 Web 国内流媒体前置 route，`zjcdn.com` 等域名在 TikTok / 国外尾部前命中 `📺 国内流媒体`。
+- `SingBox(sing-box)-full.json` 已由 generator 重新生成。
+
+## v5.4.30-sing.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：`SingBox(sing-box)-generator.js` 新增 `🔍 Google 服务` selector，位置在 `🔧 工具与服务` 之前。
+- Scholar、Google 基础服务、Google IP 与 Google QUIC route 改投新组；`SingBox(sing-box)-full.json` 已由 generator 重新生成。
+
+## v5.4.29-sing.1 (2026-06-10)
+
+- ★ PERF#165-LATENCY：`SingBox(sing-box)-generator.js` 将所有 `urltest` 出站组（当前 2 个聚合组）`interval` 从官方默认/既有 `3m` 调整为 `5m`，对应 300s 全端统一。
+- `SingBox(sing-box)-full.json` 由 generator 重新生成，元数据对齐 Clash Party v5.4.29。
+
+## v5.4.27-sing.1 (2026-06-07)
+
+- ★ CLEAN#165：由 `SingBox(sing-box)-generator.js` 重新生成 Full JSON，同步基线去掉 Claude / PayPal / HBO / Hulu / Xbox 上游规则集已覆盖的直写域名 route rules。
+
+## v5.4.26-sing.1 (2026-06-07)
+
+- ★ FIX#164：腾讯 WorkBuddy `copilot.tencent.com` 国内直连防吞。SingBox Full 由 `SingBox(sing-box)-generator.js` 执行基线 Clash Party JS 自动生成——基线在所有 AI rule-set 之前新增的 `DOMAIN-SUFFIX,copilot.tencent.com,🏠 国内网站` 已随重新生成自动转译进 `route.rules`（`domain_suffix:["copilot.tencent.com"] → outbound:"🏠 国内网站"`，位于 `geosite:openai` rule_set 之前）。基线 Clash Party v5.4.26。
+
+## v5.4.25-sing.2 (2026-06-05)
+
+- ★ FIX#SING-QUIC-P0：generator 不再把 Clash `MATCH` 转成无条件 route rule；兜底由 `route.final` 承载，避免遮蔽后续 QUIC 精细化规则。
+- ★ FIX#SING-QUIC-ORDER：6 条 sing-box QUIC 规则插入到主线 5 条 AND/QUIC 规则位置，而不是追加到末尾。
+- ★ SYNC#GROUP-ORDER：业务组顺序调整为与 Clash Party 基线一致（香港/台湾/日韩/欧洲流媒体位于其他国外流媒体之前）。
+- ★ VERIFY：合同验证新增 SingBox 业务组顺序与无条件 FINAL route rule 检查；`SingBox(sing-box)-full.json` 已重新生成。
+
+## v5.4.25-sing.1 (2026-06-04)
+
+- ★ SYNC：`SingBox(sing-box)-full.json` 重新生成并对齐 Clash Party v5.4.25 元数据。
+- ★ CLEAN：同步基线去重，删除已由 route rule 集中区块覆盖的 `geoip:netflix` / `geoip:google` 重复路由。
+- ★ FIX#SING-GEN-P2：generator 不再读取旧的 `SingBox(sing-box)-full.json` 作为 base，改用干净内置 baseConfig，避免历史生成产物污染后续生成。
+
 ## v5.4.23-sing.1 (2026-06-02)
 
 - ★ FIX#161：generator 自动从主线派生 `domain_suffix: zhimg.com / zhihu.co` → 🏠 国内网站 route rule（知乎图片 CDN + 短链，重新生成 JSON）。

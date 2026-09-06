@@ -2,42 +2,71 @@
 . /usr/share/openclash/log.sh
 
 # ============================================================================
-# Clash Smart v5.4.25-oc-normal.1 — OpenClash 覆写脚本（非 Smart 内核 / url-test 区域组）
-# Build: 2026-06-03
+# Clash Smart v6.0.13-oc-normal.7 — OpenClash 覆写脚本（非 Smart 内核 / url-test 区域组）
+# Build: 2026-09-03
 # ============================================================================
+# v6.0.13-oc-normal.7: LINUX DO 大陆备用域名 linuxdo.org 前置归入国内网站；主站 linux.do 保持受限网站
+# v5.4.33: FEAT#169-AI-CODING 接入 VPSDance AI coding 规则补齐 AI 编程工具
+# v5.4.32: FIX#168-CN-GAME 国内游戏前置到国外游戏宽规则之前，避免 HoYoverse / Game / category-games 抢先代理
 # 定位：与同目录 OpenClash(mihomo-smart).sh 规则 100% 等价的「非 Smart 内核」版本。
 #       两者唯一区别：22 个区域组（11 全部 + 11 家宽）从 type: smart（uselightgbm）换成 type: url-test。
-#       对齐 Clash Party v5.4.25 JS 基线。
+#       对齐 Clash Party v6.0.13 JS 基线。
 #       适用场景：
 #         - OpenClash 内核选的是 Meta(mihomo 稳定版) 而非 Meta Alpha，不支持 smart + LightGBM
 #         - 或者明确想关闭 LightGBM ML 评估、只靠经典 url-test 延迟选路
 #       需要 LightGBM 智能评估请改用 OpenClash(mihomo-smart).sh（Smart 版）。
 # 架构：
 #   • 22 url-test 区域组（11 全部 + 11 家宽；interval 600s / tolerance 150ms / lazy：与 Smart 版同步延迟参数）
-#   • 32 业务策略组（流媒体按平台拆分：TikTok / Netflix / Disney+ / HBO/Max / Hulu / Prime Video / YouTube / 音乐流媒体 / 其他国外流媒体）
-#   • 384 rule-providers（全部 proxy: "🚫 受限网站"，对齐 Clash Party FIX#17-P0）
-#   • ~990 条 rules
+#   • 33 业务策略组（流媒体按平台拆分：TikTok / Netflix / Disney+ / HBO/Max / Hulu / Prime Video / YouTube / 音乐流媒体 / 其他国外流媒体）
+#   • 132 融合 rule-providers（源 514 providers，全部 proxy: "🚫 受限网站"）
+#   • 151 条 rules（源 973 rules；仅保留 19 条必要内联规则）
 #   • DNS fake-ip + 嗅探（HTTP/TLS/QUIC）+ nameserver-policy 救援
 #   • Ruby 阶段做：节点过滤 / 区域分类 / url-test 组生成 / TLS 指纹注入
-# 基线：Clash Party v5.4.24（唯一主线；v5.3.1/v5.3.2 为桌面端 PROCESS-NAME 改动，路由器端不适用）── 任何规则/组/DNS 改动必须先改 Clash Party JS，
-#       再同步到此文件。参见仓库根目录 CLAUDE.md / AGENTS.md。
+# 基线：Clash Party v6.0.9（v5.3.1/v5.3.2 为桌面端 PROCESS-NAME 改动，路由器端不适用）── 任何规则/组/DNS 改动必须先改源规则图，
+#       再按生成链同步到此文件。参见仓库根目录 AGENTS.md。
 # 变更历史：见 `OpenClash/CHANGELOG.md`（Normal 部分）。
 # ============================================================================
 
 
 
-VERSION_TAG="v5.4.25-oc-normal.1"
+VERSION_TAG="v6.0.13-oc-normal.7"
 CONFIG_FILE="$1"
 LOG_FILE="/tmp/openclash.log"
+SCKI_SUBSCRIPTION_ADAPTER_PROFILE="${SCKI_SUBSCRIPTION_ADAPTER_PROFILE:-adaptive}"
+case "$SCKI_SUBSCRIPTION_ADAPTER_PROFILE" in
+  off|policy|adaptive) ;;
+  *) SCKI_SUBSCRIPTION_ADAPTER_PROFILE="adaptive" ;;
+esac
+
+umask 077
+TMP_DIR="${TMPDIR:-/tmp}"
+make_temp_file() {
+  local prefix="$1"
+  local temp_file=""
+  temp_file="$(mktemp "$TMP_DIR/${prefix}.XXXXXX" 2>/dev/null)" && {
+    printf '%s\n' "$temp_file"
+    return 0
+  }
+  temp_file="$TMP_DIR/${prefix}.$$"
+  ( set -C; : > "$temp_file" ) || exit 1
+  printf '%s\n' "$temp_file"
+}
+
+OVERRIDE_YAML="$(make_temp_file clash_normal_override)"
+RUBY_SCRIPT="$(make_temp_file clash_normal_ruby)"
+STATUS_LOG="$(make_temp_file clash_normal_status)"
+cleanup_temp_files() {
+  rm -f "$OVERRIDE_YAML" "$RUBY_SCRIPT" "$STATUS_LOG"
+}
+trap cleanup_temp_files EXIT INT TERM
 
 LOG_OUT "Info" "[Clash-Normal] $VERSION_TAG overwrite starting..."
 LOG_OUT "Info" "[Clash-Normal] Processing: $CONFIG_FILE"
-LOG_OUT "Info" "[Clash-Normal] Full-rule build (v5.4.17, 32 business groups, non-Smart kernel)"
+LOG_OUT "Info" "[Clash-Normal] Fused-rule build (v6.0.9, 33 business groups, non-Smart kernel)"
 
 # ============================================================================
 # OVERRIDE YAML
 # ============================================================================
-OVERRIDE_YAML="/tmp/clash_normal_override.yaml"
 cat > "$OVERRIDE_YAML" << 'OVERRIDE_EOF'
 hosts:
   one.one.one.one:
@@ -106,6 +135,15 @@ dns:
   - +.wggames.cn
   - +.wowsgame.cn
   - +.mcdn.bilivideo.cn
+  - +.pub.3gppnetwork.org
+  - +.bing.com
+  - +.miwifi.com
+  - +.courier.push.apple.com
+  - +.miui.com
+  - +.xiaomi.com
+  - +.xiaomi.net
+  - +.mijia.tech
+  - +.gotui.com
   cache-algorithm: arc
   # 对齐 Clash Party v5.4.17 基线：default-nameserver 纯 IP，其它 resolver 固定 DoH
   # FIX#HOSTS-ALIGN: use-hosts 改 true（对齐主线启用 hosts 预解析，消除 fake-ip 冷启动循环依赖）
@@ -120,6 +158,12 @@ dns:
   - 'https://1.1.1.1/dns-query'
   - '223.5.5.5'
   nameserver-policy:
+    geosite:cn:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+    geosite:geolocation-!cn:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
     '+.jsdelivr.net':
     - https://cloudflare-dns.com/dns-query
     - https://dns.google/dns-query
@@ -146,7 +190,7 @@ dns:
   direct-nameserver:
   - https://dns.alidns.com/dns-query
   - https://doh.pub/dns-query
-  # v5.4.19 #5 借鉴 Proxy-override：让 direct-nameserver 也遵循 nameserver-policy（默认 false）。policy 仅含境外 CDN，零国内误伤。
+  # v5.4.19 #5 借鉴 Proxy-override：让 direct-nameserver 也遵循 nameserver-policy（默认 false）。policy 覆盖境外 CDN 与 geosite 级分流。
   direct-nameserver-follow-policy: true
   fallback:
   - https://cloudflare-dns.com/dns-query
@@ -426,6 +470,9 @@ proxy-groups:
 - name: 🎮 国外游戏
   type: select
   proxies: *id002
+- name: 🔍 Google 服务
+  type: select
+  proxies: *id002
 - name: 🔧 工具与服务
   type: select
   proxies: *id002
@@ -469,3861 +516,1225 @@ proxy-groups:
 OVERRIDE_EOF
 
 # ============================================================================
-# OVERRIDE YAML (续) — Rule-Providers：384 项，对齐 Clash Party v5.2.8 主线
+# OVERRIDE YAML (续) — Fused Rule-Providers：127 项，对齐 Clash Party v6.0.9 主线
 # 策略：
 #   ✓ 与 Clash Party 主线（BIZ.GFW = '🚫 受限网站'）一致：所有 provider 都走 GFW 组
 #     下载，在中国走代理、在印尼走 DIRECT，规避 jsdelivr/GitHub 冷启动死锁。
-#   ✓ 9 url-test 区域组 + 28 业务组 + 384 rule-providers + ~975 条规则
+#   ✓ 22 url-test 区域组 + 33 业务组 + 132 融合 rule-providers + 151 条规则
 #   ✓ 区域组统一 type: url-test + include-all-proxies / explicit proxies 分流
 #   ✓ TLS 指纹注入（Ruby 阶段 _simple_hash 分配）
 # ============================================================================
 cat >> "$OVERRIDE_YAML" << 'OVERRIDE_EOF'
 rule-providers:
-  '56':
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/56/56.yaml
-    path: "./ruleset/bm7-56.yaml"
-    interval: 87883
-    proxy: "\U0001F6AB 受限网站"
-  anti-ad:
+  scki-fused-001-direct-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@mihomo-ruleset/ads.mrs
-    path: "./ruleset/anti-ad.mrs"
-    interval: 85541
-    proxy: "\U0001F6AB 受限网站"
-  openai:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-001-direct-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-001-direct-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-002-intl-site-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/openai.mrs
-    path: "./ruleset/meta-openai.mrs"
-    interval: 85525
-    proxy: "\U0001F6AB 受限网站"
-  claude:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Claude/Claude.yaml
-    path: "./ruleset/bm7-Claude.yaml"
-    interval: 85554
-    proxy: "\U0001F6AB 受限网站"
-  gemini:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Gemini/Gemini.yaml
-    path: "./ruleset/bm7-Gemini.yaml"
-    interval: 85567
-    proxy: "\U0001F6AB 受限网站"
-  copilot:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Copilot/Copilot.yaml
-    path: "./ruleset/bm7-Copilot.yaml"
-    interval: 85577
-    proxy: "\U0001F6AB 受限网站"
-  cryptocurrency:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Cryptocurrency/Cryptocurrency.yaml
-    path: "./ruleset/bm7-Cryptocurrency.yaml"
-    interval: 85599
-    proxy: "\U0001F6AB 受限网站"
-  telegram:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-002-intl-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-002-intl-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-003-payments-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/telegram.mrs
-    path: "./ruleset/meta-telegram.mrs"
-    interval: 85629
-    proxy: "\U0001F6AB 受限网站"
-  telegram-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-003-payments-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-003-payments-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-004-ai-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-004-ai-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-004-ai-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-005-cnmedia-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-005-cnmedia-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-005-cnmedia-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-006-ad-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-006-ad-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-006-ad-ipcidr:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/telegram.mrs
-    path: "./ruleset/meta-ip-telegram.mrs"
-    interval: 85650
-    proxy: "\U0001F6AB 受限网站"
-  discord:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-006-ad-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-006-ad-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Discord/Discord.yaml
-    path: "./ruleset/bm7-Discord.yaml"
-    interval: 85639
-    proxy: "\U0001F6AB 受限网站"
-  line:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Line/Line.yaml
-    path: "./ruleset/bm7-Line.yaml"
-    interval: 85646
-    proxy: "\U0001F6AB 受限网站"
-  whatsapp:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Whatsapp/Whatsapp.yaml
-    path: "./ruleset/bm7-Whatsapp.yaml"
-    interval: 85694
-    proxy: "\U0001F6AB 受限网站"
-  kakaotalk:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/KakaoTalk/KakaoTalk.yaml
-    path: "./ruleset/bm7-KakaoTalk.yaml"
-    interval: 85670
-    proxy: "\U0001F6AB 受限网站"
-  twitter:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-006-ad-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-007-cn-site-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/twitter.mrs
-    path: "./ruleset/meta-twitter.mrs"
-    interval: 85737
-    proxy: "\U0001F6AB 受限网站"
-  twitter-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-007-cn-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-007-cn-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-008-direct-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-008-direct-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-008-direct-ipcidr-no-resolve:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/twitter.mrs
-    path: "./ruleset/meta-ip-twitter.mrs"
-    interval: 85729
-    proxy: "\U0001F6AB 受限网站"
-  tiktok:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-008-direct-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-008-direct-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-008-direct-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-009-work-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-009-work-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-009-work-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-010-crypto-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/tiktok.mrs
-    path: "./ruleset/meta-tiktok.mrs"
-    interval: 85713
-    proxy: "\U0001F6AB 受限网站"
-  reddit:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Reddit/Reddit.yaml
-    path: "./ruleset/bm7-Reddit.yaml"
-    interval: 85767
-    proxy: "\U0001F6AB 受限网站"
-  facebook:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Facebook/Facebook.yaml
-    path: "./ruleset/bm7-Facebook.yaml"
-    interval: 85762
-    proxy: "\U0001F6AB 受限网站"
-  instagram:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Instagram/Instagram.yaml
-    path: "./ruleset/bm7-Instagram.yaml"
-    interval: 85796
-    proxy: "\U0001F6AB 受限网站"
-  snapchat:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-010-crypto-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-010-crypto-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-011-gfw-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/snap.mrs
-    path: "./ruleset/meta-snap.mrs"
-    interval: 85783
-    proxy: "\U0001F6AB 受限网站"
-  pinterest:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-011-gfw-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-011-gfw-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-012-youtube-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-012-youtube-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-012-youtube-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-013-cn-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-013-cn-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-013-cn-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-014-ai-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-014-ai-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-014-ai-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-015-google-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-015-google-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-015-google-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-015-google-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Pinterest/Pinterest.yaml
-    path: "./ruleset/bm7-Pinterest.yaml"
-    interval: 85816
-    proxy: "\U0001F6AB 受限网站"
-  linkedin:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-015-google-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-015-google-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-016-work-domain:
     type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LinkedIn/LinkedIn.yaml
-    path: "./ruleset/bm7-LinkedIn.yaml"
-    interval: 85807
-    proxy: "\U0001F6AB 受限网站"
-  facebook-ip:
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-016-work-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-016-work-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-017-ai-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-017-ai-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-017-ai-ipcidr:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/facebook.mrs
-    path: "./ruleset/meta-ip-facebook.mrs"
-    interval: 85839
-    proxy: "\U0001F6AB 受限网站"
-  slack:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-017-ai-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-017-ai-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Slack/Slack.yaml
-    path: "./ruleset/bm7-Slack.yaml"
-    interval: 85885
-    proxy: "\U0001F6AB 受限网站"
-  zoom:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Providers/Ruleset/Zoom.yaml
-    path: "./ruleset/acl4ssr-Zoom.yaml"
-    interval: 85891
-    proxy: "\U0001F6AB 受限网站"
-  teams:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Teams/Teams.yaml
-    path: "./ruleset/bm7-Teams.yaml"
-    interval: 85902
-    proxy: "\U0001F6AB 受限网站"
-  google:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-017-ai-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-018-intl-site-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/google.mrs
-    path: "./ruleset/meta-google.mrs"
-    interval: 85892
-    proxy: "\U0001F6AB 受限网站"
-  google-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-018-intl-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-018-intl-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-019-im-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-019-im-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-019-im-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-020-work-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-020-work-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-020-work-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-021-download-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-021-download-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-021-download-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-021-download-ipcidr:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/google.mrs
-    path: "./ruleset/meta-ip-google.mrs"
-    interval: 85946
-    proxy: "\U0001F6AB 受限网站"
-  bing:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Bing/Bing.yaml
-    path: "./ruleset/bm7-Bing.yaml"
-    interval: 85933
-    proxy: "\U0001F6AB 受限网站"
-  youtube:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-021-download-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-021-download-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-022-google-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/youtube.mrs
-    path: "./ruleset/meta-youtube.mrs"
-    interval: 85983
-    proxy: "\U0001F6AB 受限网站"
-  netflix:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/netflix.mrs
-    path: "./ruleset/meta-netflix.mrs"
-    interval: 85965
-    proxy: "\U0001F6AB 受限网站"
-  netflix-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-022-google-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-022-google-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-022-google-ipcidr-no-resolve:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/netflix.mrs
-    path: "./ruleset/meta-ip-netflix.mrs"
-    interval: 86006
-    proxy: "\U0001F6AB 受限网站"
-  spotify:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-022-google-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-022-google-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-023-tools-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/spotify.mrs
-    path: "./ruleset/meta-spotify.mrs"
-    interval: 86035
-    proxy: "\U0001F6AB 受限网站"
-  disney:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Disney/Disney.yaml
-    path: "./ruleset/bm7-Disney.yaml"
-    interval: 86021
-    proxy: "\U0001F6AB 受限网站"
-  hbo:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HBO/HBO.yaml
-    path: "./ruleset/bm7-HBO.yaml"
-    interval: 86044
-    proxy: "\U0001F6AB 受限网站"
-  primevideo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PrimeVideo/PrimeVideo.yaml
-    path: "./ruleset/bm7-PrimeVideo.yaml"
-    interval: 86080
-    proxy: "\U0001F6AB 受限网站"
-  hulu:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Hulu/Hulu.yaml
-    path: "./ruleset/bm7-Hulu.yaml"
-    interval: 86063
-    proxy: "\U0001F6AB 受限网站"
-  paramount:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ParamountPlus/ParamountPlus.yaml
-    path: "./ruleset/bm7-ParamountPlus.yaml"
-    interval: 86100
-    proxy: "\U0001F6AB 受限网站"
-  amazon:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Amazon/Amazon.yaml
-    path: "./ruleset/bm7-Amazon.yaml"
-    interval: 86084
-    proxy: "\U0001F6AB 受限网站"
-  peacock:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Peacock/Peacock.yaml
-    path: "./ruleset/bm7-Peacock.yaml"
-    interval: 86095
-    proxy: "\U0001F6AB 受限网站"
-  twitch:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Twitch/Twitch.yaml
-    path: "./ruleset/bm7-Twitch.yaml"
-    interval: 86159
-    proxy: "\U0001F6AB 受限网站"
-  bahamut:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-023-tools-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-023-tools-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-024-ai-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bahamut.mrs
-    path: "./ruleset/meta-bahamut.mrs"
-    interval: 86129
-    proxy: "\U0001F6AB 受限网站"
-  kktv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/KKTV/KKTV.yaml
-    path: "./ruleset/bm7-KKTV.yaml"
-    interval: 86166
-    proxy: "\U0001F6AB 受限网站"
-  abema:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/abema.mrs
-    path: "./ruleset/meta-abema.mrs"
-    interval: 86199
-    proxy: "\U0001F6AB 受限网站"
-  dazn:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DAZN/DAZN.yaml
-    path: "./ruleset/bm7-DAZN.yaml"
-    interval: 86160
-    proxy: "\U0001F6AB 受限网站"
-  bbc:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bbc.mrs
-    path: "./ruleset/meta-bbc.mrs"
-    interval: 86209
-    proxy: "\U0001F6AB 受限网站"
-  steam:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Steam/Steam.yaml
-    path: "./ruleset/bm7-Steam.yaml"
-    interval: 86210
-    proxy: "\U0001F6AB 受限网站"
-  epic:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Epic/Epic.yaml
-    path: "./ruleset/bm7-Epic.yaml"
-    interval: 86251
-    proxy: "\U0001F6AB 受限网站"
-  playstation:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PlayStation/PlayStation.yaml
-    path: "./ruleset/bm7-PlayStation.yaml"
-    interval: 86220
-    proxy: "\U0001F6AB 受限网站"
-  nintendo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Nintendo/Nintendo.yaml
-    path: "./ruleset/bm7-Nintendo.yaml"
-    interval: 86285
-    proxy: "\U0001F6AB 受限网站"
-  xbox:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Xbox/Xbox.yaml
-    path: "./ruleset/bm7-Xbox.yaml"
-    interval: 86280
-    proxy: "\U0001F6AB 受限网站"
-  ea:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/EA/EA.yaml
-    path: "./ruleset/bm7-EA.yaml"
-    interval: 86272
-    proxy: "\U0001F6AB 受限网站"
-  blizzard:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Blizzard/Blizzard.yaml
-    path: "./ruleset/bm7-Blizzard.yaml"
-    interval: 86301
-    proxy: "\U0001F6AB 受限网站"
-  microsoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/microsoft.mrs
-    path: "./ruleset/meta-microsoft.mrs"
-    interval: 86345
-    proxy: "\U0001F6AB 受限网站"
-  onedrive:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/onedrive.mrs
-    path: "./ruleset/meta-onedrive.mrs"
-    interval: 86350
-    proxy: "\U0001F6AB 受限网站"
-  apple:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/apple.mrs
-    path: "./ruleset/meta-apple.mrs"
-    interval: 86335
-    proxy: "\U0001F6AB 受限网站"
-  icloud:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/icloud.mrs
-    path: "./ruleset/meta-icloud.mrs"
-    interval: 86358
-    proxy: "\U0001F6AB 受限网站"
-  applemusic:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleMusic/AppleMusic.yaml
-    path: "./ruleset/bm7-AppleMusic.yaml"
-    interval: 86391
-    proxy: "\U0001F6AB 受限网站"
-  github:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/github.mrs
-    path: "./ruleset/meta-github.mrs"
-    interval: 86407
-    proxy: "\U0001F6AB 受限网站"
-  docker:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Docker/Docker.yaml
-    path: "./ruleset/bm7-Docker.yaml"
-    interval: 86426
-    proxy: "\U0001F6AB 受限网站"
-  gitlab:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GitLab/GitLab.yaml
-    path: "./ruleset/bm7-GitLab.yaml"
-    interval: 86450
-    proxy: "\U0001F6AB 受限网站"
-  paypal:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PayPal/PayPal.yaml
-    path: "./ruleset/bm7-PayPal.yaml"
-    interval: 86454
-    proxy: "\U0001F6AB 受限网站"
-  cloudflare-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-024-ai-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-024-ai-ipcidr-no-resolve:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cloudflare.mrs
-    path: "./ruleset/meta-ip-cloudflare.mrs"
-    interval: 86468
-    proxy: "\U0001F6AB 受限网站"
-  cloudfront-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-024-ai-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-024-ai-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-024-ai-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-025-google-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-025-google-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-025-google-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-026-ai-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-026-ai-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-026-ai-ipcidr-no-resolve:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cloudfront.mrs
-    path: "./ruleset/meta-ip-cloudfront.mrs"
-    interval: 86501
-    proxy: "\U0001F6AB 受限网站"
-  fastly-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-026-ai-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-026-ai-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-026-ai-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-027-crypto-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-027-crypto-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-027-crypto-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-027-crypto-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-027-crypto-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-027-crypto-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-028-payments-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-028-payments-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-028-payments-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-028-payments-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-028-payments-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-028-payments-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-029-microsoft-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-029-microsoft-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-029-microsoft-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-030-intl-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-030-intl-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-030-intl-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-031-direct-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-031-direct-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-031-direct-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-032-im-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-032-im-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-032-im-ipcidr:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/fastly.mrs
-    path: "./ruleset/meta-ip-fastly.mrs"
-    interval: 86471
-    proxy: "\U0001F6AB 受限网站"
-  systemota:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SystemOTA/SystemOTA.yaml
-    path: "./ruleset/bm7-SystemOTA.yaml"
-    interval: 86498
-    proxy: "\U0001F6AB 受限网站"
-  viu:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ViuTV/ViuTV.yaml
-    path: "./ruleset/bm7-ViuTV.yaml"
-    interval: 86503
-    proxy: "\U0001F6AB 受限网站"
-  bilibili:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bilibili.mrs
-    path: "./ruleset/meta-bilibili.mrs"
-    interval: 86540
-    proxy: "\U0001F6AB 受限网站"
-  biliintl:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/biliintl.mrs
-    path: "./ruleset/meta-biliintl.mrs"
-    interval: 86565
-    proxy: "\U0001F6AB 受限网站"
-  cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.mrs
-    path: "./ruleset/meta-cn.mrs"
-    interval: 86553
-    proxy: "\U0001F6AB 受限网站"
-  cn-ip:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-032-im-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-032-im-ipcidr-no-resolve:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.mrs
-    path: "./ruleset/meta-ip-cn.mrs"
-    interval: 86573
-    proxy: "\U0001F6AB 受限网站"
-  proxy:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-032-im-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-032-im-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-032-im-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-033-social-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/geolocation-!cn.mrs
-    path: "./ruleset/meta-geolocation-!cn.mrs"
-    interval: 86624
-    proxy: "\U0001F6AB 受限网站"
-  advertising:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Advertising/Advertising.yaml
-    path: "./ruleset/bm7-Advertising.yaml"
-    interval: 86609
-    proxy: "\U0001F6AB 受限网站"
-  advertisingmitv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AdvertisingMiTV/AdvertisingMiTV.yaml
-    path: "./ruleset/bm7-AdvertisingMiTV.yaml"
-    interval: 86596
-    proxy: "\U0001F6AB 受限网站"
-  adobeactivation:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AdobeActivation/AdobeActivation.yaml
-    path: "./ruleset/bm7-AdobeActivation.yaml"
-    interval: 86648
-    proxy: "\U0001F6AB 受限网站"
-  blockhttpdns:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BlockHttpDNS/BlockHttpDNS.yaml
-    path: "./ruleset/bm7-BlockHttpDNS.yaml"
-    interval: 86641
-    proxy: "\U0001F6AB 受限网站"
-  domob:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Domob/Domob.yaml
-    path: "./ruleset/bm7-Domob.yaml"
-    interval: 86662
-    proxy: "\U0001F6AB 受限网站"
-  hijacking:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Hijacking/Hijacking.yaml
-    path: "./ruleset/bm7-Hijacking.yaml"
-    interval: 86685
-    proxy: "\U0001F6AB 受限网站"
-  jiguangtuisong:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/JiGuangTuiSong/JiGuangTuiSong.yaml
-    path: "./ruleset/bm7-JiGuangTuiSong.yaml"
-    interval: 86712
-    proxy: "\U0001F6AB 受限网站"
-  marketing:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Marketing/Marketing.yaml
-    path: "./ruleset/bm7-Marketing.yaml"
-    interval: 86688
-    proxy: "\U0001F6AB 受限网站"
-  miuiprivacy:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MIUIPrivacy/MIUIPrivacy.yaml
-    path: "./ruleset/bm7-MIUIPrivacy.yaml"
-    interval: 86754
-    proxy: "\U0001F6AB 受限网站"
-  privacy:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Privacy/Privacy.yaml
-    path: "./ruleset/bm7-Privacy.yaml"
-    interval: 86764
-    proxy: "\U0001F6AB 受限网站"
-  youmengchuangxiang:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/YouMengChuangXiang/YouMengChuangXiang.yaml
-    path: "./ruleset/bm7-YouMengChuangXiang.yaml"
-    interval: 86765
-    proxy: "\U0001F6AB 受限网站"
-  civitai:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Civitai/Civitai.yaml
-    path: "./ruleset/bm7-Civitai.yaml"
-    interval: 86763
-    proxy: "\U0001F6AB 受限网站"
-  binance:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Binance/Binance.yaml
-    path: "./ruleset/bm7-Binance.yaml"
-    interval: 86814
-    proxy: "\U0001F6AB 受限网站"
-  stripe:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Stripe/Stripe.yaml
-    path: "./ruleset/bm7-Stripe.yaml"
-    interval: 86820
-    proxy: "\U0001F6AB 受限网站"
-  visa:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/VISA/VISA.yaml
-    path: "./ruleset/bm7-VISA.yaml"
-    interval: 86847
-    proxy: "\U0001F6AB 受限网站"
-  tigerfintech:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TigerFintech/TigerFintech.yaml
-    path: "./ruleset/bm7-TigerFintech.yaml"
-    interval: 86851
-    proxy: "\U0001F6AB 受限网站"
-  mail:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Mail/Mail.yaml
-    path: "./ruleset/bm7-Mail.yaml"
-    interval: 86856
-    proxy: "\U0001F6AB 受限网站"
-  mailru:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Mailru/Mailru.yaml
-    path: "./ruleset/bm7-Mailru.yaml"
-    interval: 86885
-    proxy: "\U0001F6AB 受限网站"
-  protonmail:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Protonmail/Protonmail.yaml
-    path: "./ruleset/bm7-Protonmail.yaml"
-    interval: 86885
-    proxy: "\U0001F6AB 受限网站"
-  spark:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Spark/Spark.yaml
-    path: "./ruleset/bm7-Spark.yaml"
-    interval: 86900
-    proxy: "\U0001F6AB 受限网站"
-  telegramnl:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TelegramNL/TelegramNL.yaml
-    path: "./ruleset/bm7-TelegramNL.yaml"
-    interval: 86881
-    proxy: "\U0001F6AB 受限网站"
-  telegramsg:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TelegramSG/TelegramSG.yaml
-    path: "./ruleset/bm7-TelegramSG.yaml"
-    interval: 86921
-    proxy: "\U0001F6AB 受限网站"
-  telegramus:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TelegramUS/TelegramUS.yaml
-    path: "./ruleset/bm7-TelegramUS.yaml"
-    interval: 86927
-    proxy: "\U0001F6AB 受限网站"
-  zalo:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Zalo/Zalo.yaml
-    path: "./ruleset/bm7-Zalo.yaml"
-    interval: 86962
-    proxy: "\U0001F6AB 受限网站"
-  googlevoice:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GoogleVoice/GoogleVoice.yaml
-    path: "./ruleset/bm7-GoogleVoice.yaml"
-    interval: 86945
-    proxy: "\U0001F6AB 受限网站"
-  italkbb:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/iTalkBB/iTalkBB.yaml
-    path: "./ruleset/bm7-iTalkBB.yaml"
-    interval: 86968
-    proxy: "\U0001F6AB 受限网站"
-  tumblr:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Tumblr/Tumblr.yaml
-    path: "./ruleset/bm7-Tumblr.yaml"
-    interval: 86988
-    proxy: "\U0001F6AB 受限网站"
-  clubhouse:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Clubhouse/Clubhouse.yaml
-    path: "./ruleset/bm7-Clubhouse.yaml"
-    interval: 87026
-    proxy: "\U0001F6AB 受限网站"
-  clubhouseip:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ClubhouseIP/ClubhouseIP.yaml
-    path: "./ruleset/bm7-ClubhouseIP.yaml"
-    interval: 87024
-    proxy: "\U0001F6AB 受限网站"
-  pixiv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Pixiv/Pixiv.yaml
-    path: "./ruleset/bm7-Pixiv.yaml"
-    interval: 87052
-    proxy: "\U0001F6AB 受限网站"
-  truthsocial:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TruthSocial/TruthSocial.yaml
-    path: "./ruleset/bm7-TruthSocial.yaml"
-    interval: 87054
-    proxy: "\U0001F6AB 受限网站"
-  vk:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/VK/VK.yaml
-    path: "./ruleset/bm7-VK.yaml"
-    interval: 87091
-    proxy: "\U0001F6AB 受限网站"
-  blued:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Blued/Blued.yaml
-    path: "./ruleset/bm7-Blued.yaml"
-    interval: 87077
-    proxy: "\U0001F6AB 受限网站"
-  disqus:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Disqus/Disqus.yaml
-    path: "./ruleset/bm7-Disqus.yaml"
-    interval: 87078
-    proxy: "\U0001F6AB 受限网站"
-  imgur:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Imgur/Imgur.yaml
-    path: "./ruleset/bm7-Imgur.yaml"
-    interval: 87115
-    proxy: "\U0001F6AB 受限网站"
-  pixnet:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Pixnet/Pixnet.yaml
-    path: "./ruleset/bm7-Pixnet.yaml"
-    interval: 87111
-    proxy: "\U0001F6AB 受限网站"
-  atlassian:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Atlassian/Atlassian.yaml
-    path: "./ruleset/bm7-Atlassian.yaml"
-    interval: 87174
-    proxy: "\U0001F6AB 受限网站"
-  notion:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Notion/Notion.yaml
-    path: "./ruleset/bm7-Notion.yaml"
-    interval: 87150
-    proxy: "\U0001F6AB 受限网站"
-  teamviewer:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TeamViewer/TeamViewer.yaml
-    path: "./ruleset/bm7-TeamViewer.yaml"
-    interval: 87191
-    proxy: "\U0001F6AB 受限网站"
-  zoho:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Zoho/Zoho.yaml
-    path: "./ruleset/bm7-Zoho.yaml"
-    interval: 87223
-    proxy: "\U0001F6AB 受限网站"
-  salesforce:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Salesforce/Salesforce.yaml
-    path: "./ruleset/bm7-Salesforce.yaml"
-    interval: 87231
-    proxy: "\U0001F6AB 受限网站"
-  zendesk:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Zendesk/Zendesk.yaml
-    path: "./ruleset/bm7-Zendesk.yaml"
-    interval: 87221
-    proxy: "\U0001F6AB 受限网站"
-  intercom:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Intercom/Intercom.yaml
-    path: "./ruleset/bm7-Intercom.yaml"
-    interval: 87218
-    proxy: "\U0001F6AB 受限网站"
-  remotedesktop:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/RemoteDesktop/RemoteDesktop.yaml
-    path: "./ruleset/bm7-RemoteDesktop.yaml"
-    interval: 87253
-    proxy: "\U0001F6AB 受限网站"
-  iqiyi:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/iQIYI/iQIYI.yaml
-    path: "./ruleset/bm7-iQIYI.yaml"
-    interval: 87261
-    proxy: "\U0001F6AB 受限网站"
-  youku:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Youku/Youku.yaml
-    path: "./ruleset/bm7-Youku.yaml"
-    interval: 87268
-    proxy: "\U0001F6AB 受限网站"
-  tencentvideo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TencentVideo/TencentVideo.yaml
-    path: "./ruleset/bm7-TencentVideo.yaml"
-    interval: 87270
-    proxy: "\U0001F6AB 受限网站"
-  douyin:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DouYin/DouYin.yaml
-    path: "./ruleset/bm7-DouYin.yaml"
-    interval: 87313
-    proxy: "\U0001F6AB 受限网站"
-  bytedance:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ByteDance/ByteDance.yaml
-    path: "./ruleset/bm7-ByteDance.yaml"
-    interval: 87336
-    proxy: "\U0001F6AB 受限网站"
-  kuaishou:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/KuaiShou/KuaiShou.yaml
-    path: "./ruleset/bm7-KuaiShou.yaml"
-    interval: 87339
-    proxy: "\U0001F6AB 受限网站"
-  weibo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Weibo/Weibo.yaml
-    path: "./ruleset/bm7-Weibo.yaml"
-    interval: 87384
-    proxy: "\U0001F6AB 受限网站"
-  xiaohongshu:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/XiaoHongShu/XiaoHongShu.yaml
-    path: "./ruleset/bm7-XiaoHongShu.yaml"
-    interval: 87357
-    proxy: "\U0001F6AB 受限网站"
-  neteasemusic:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/NetEaseMusic/NetEaseMusic.yaml
-    path: "./ruleset/bm7-NetEaseMusic.yaml"
-    interval: 87376
-    proxy: "\U0001F6AB 受限网站"
-  kugoukuwo:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/KugouKuwo/KugouKuwo.yaml
-    path: "./ruleset/bm7-KugouKuwo.yaml"
-    interval: 87413
-    proxy: "\U0001F6AB 受限网站"
-  sohu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Sohu/Sohu.yaml
-    path: "./ruleset/bm7-Sohu.yaml"
-    interval: 87402
-    proxy: "\U0001F6AB 受限网站"
-  acfun:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AcFun/AcFun.yaml
-    path: "./ruleset/bm7-AcFun.yaml"
-    interval: 87455
-    proxy: "\U0001F6AB 受限网站"
-  douyu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Douyu/Douyu.yaml
-    path: "./ruleset/bm7-Douyu.yaml"
-    interval: 87422
-    proxy: "\U0001F6AB 受限网站"
-  huya:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HuYa/HuYa.yaml
-    path: "./ruleset/bm7-HuYa.yaml"
-    interval: 87436
-    proxy: "\U0001F6AB 受限网站"
-  himalaya:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Himalaya/Himalaya.yaml
-    path: "./ruleset/bm7-Himalaya.yaml"
-    interval: 87453
-    proxy: "\U0001F6AB 受限网站"
-  cctv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CCTV/CCTV.yaml
-    path: "./ruleset/bm7-CCTV.yaml"
-    interval: 87522
-    proxy: "\U0001F6AB 受限网站"
-  hunantv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HunanTV/HunanTV.yaml
-    path: "./ruleset/bm7-HunanTV.yaml"
-    interval: 87509
-    proxy: "\U0001F6AB 受限网站"
-  pptv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PPTV/PPTV.yaml
-    path: "./ruleset/bm7-PPTV.yaml"
-    interval: 87512
-    proxy: "\U0001F6AB 受限网站"
-  funshion:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Funshion/Funshion.yaml
-    path: "./ruleset/bm7-Funshion.yaml"
-    interval: 87568
-    proxy: "\U0001F6AB 受限网站"
-  letv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LeTV/LeTV.yaml
-    path: "./ruleset/bm7-LeTV.yaml"
-    interval: 87574
-    proxy: "\U0001F6AB 受限网站"
-  taihemusic:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TaiheMusic/TaiheMusic.yaml
-    path: "./ruleset/bm7-TaiheMusic.yaml"
-    interval: 87581
-    proxy: "\U0001F6AB 受限网站"
-  kukemusic:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/KuKeMusic/KuKeMusic.yaml
-    path: "./ruleset/bm7-KuKeMusic.yaml"
-    interval: 87556
-    proxy: "\U0001F6AB 受限网站"
-  hibymusic:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HibyMusic/HibyMusic.yaml
-    path: "./ruleset/bm7-HibyMusic.yaml"
-    interval: 87601
-    proxy: "\U0001F6AB 受限网站"
-  miwu:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MiWu/MiWu.yaml
-    path: "./ruleset/bm7-MiWu.yaml"
-    interval: 87644
-    proxy: "\U0001F6AB 受限网站"
-  migu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Migu/Migu.yaml
-    path: "./ruleset/bm7-Migu.yaml"
-    interval: 87633
-    proxy: "\U0001F6AB 受限网站"
-  iptvmainland:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/IPTVMainland/IPTVMainland.yaml
-    path: "./ruleset/bm7-IPTVMainland.yaml"
-    interval: 87649
-    proxy: "\U0001F6AB 受限网站"
-  iptvother:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/IPTVOther/IPTVOther.yaml
-    path: "./ruleset/bm7-IPTVOther.yaml"
-    interval: 87654
-    proxy: "\U0001F6AB 受限网站"
-  cibn:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CIBN/CIBN.yaml
-    path: "./ruleset/bm7-CIBN.yaml"
-    interval: 87672
-    proxy: "\U0001F6AB 受限网站"
-  bestv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BesTV/BesTV.yaml
-    path: "./ruleset/bm7-BesTV.yaml"
-    interval: 87674
-    proxy: "\U0001F6AB 受限网站"
-  huashutv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HuaShuTV/HuaShuTV.yaml
-    path: "./ruleset/bm7-HuaShuTV.yaml"
-    interval: 87677
-    proxy: "\U0001F6AB 受限网站"
-  smg:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SMG/SMG.yaml
-    path: "./ruleset/bm7-SMG.yaml"
-    interval: 87720
-    proxy: "\U0001F6AB 受限网站"
-  hwtv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HWTV/HWTV.yaml
-    path: "./ruleset/bm7-HWTV.yaml"
-    interval: 87718
-    proxy: "\U0001F6AB 受限网站"
-  nivodtv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/NivodTV/NivodTV.yaml
-    path: "./ruleset/bm7-NivodTV.yaml"
-    interval: 87752
-    proxy: "\U0001F6AB 受限网站"
-  olevod:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Olevod/Olevod.yaml
-    path: "./ruleset/bm7-Olevod.yaml"
-    interval: 87761
-    proxy: "\U0001F6AB 受限网站"
-  dandanzan:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DanDanZan/DanDanZan.yaml
-    path: "./ruleset/bm7-DanDanZan.yaml"
-    interval: 87769
-    proxy: "\U0001F6AB 受限网站"
-  dandanplay:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Dandanplay/Dandanplay.yaml
-    path: "./ruleset/bm7-Dandanplay.yaml"
-    interval: 87821
-    proxy: "\U0001F6AB 受限网站"
-  tiantiankankan:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TianTianKanKan/TianTianKanKan.yaml
-    path: "./ruleset/bm7-TianTianKanKan.yaml"
-    interval: 87835
-    proxy: "\U0001F6AB 受限网站"
-  yizhibo:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/YiZhiBo/YiZhiBo.yaml
-    path: "./ruleset/bm7-YiZhiBo.yaml"
-    interval: 87800
-    proxy: "\U0001F6AB 受限网站"
-  ku6:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Ku6/Ku6.yaml
-    path: "./ruleset/bm7-Ku6.yaml"
-    interval: 87828
-    proxy: "\U0001F6AB 受限网站"
-  cetv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CETV/CETV.yaml
-    path: "./ruleset/bm7-CETV.yaml"
-    interval: 87865
-    proxy: "\U0001F6AB 受限网站"
-  yyets:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/YYeTs/YYeTs.yaml
-    path: "./ruleset/bm7-YYeTs.yaml"
-    interval: 87909
-    proxy: "\U0001F6AB 受限网站"
-  asianmedia:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AsianMedia/AsianMedia.yaml
-    path: "./ruleset/bm7-AsianMedia.yaml"
-    interval: 87888
-    proxy: "\U0001F6AB 受限网站"
-  iqiyiintl:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/iQIYIIntl/iQIYIIntl.yaml
-    path: "./ruleset/bm7-iQIYIIntl.yaml"
-    interval: 87910
-    proxy: "\U0001F6AB 受限网站"
-  joox:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/JOOX/JOOX.yaml
-    path: "./ruleset/bm7-JOOX.yaml"
-    interval: 87939
-    proxy: "\U0001F6AB 受限网站"
-  mewatch:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MeWatch/MeWatch.yaml
-    path: "./ruleset/bm7-MeWatch.yaml"
-    interval: 87930
-    proxy: "\U0001F6AB 受限网站"
-  viki:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Viki/Viki.yaml
-    path: "./ruleset/bm7-Viki.yaml"
-    interval: 87961
-    proxy: "\U0001F6AB 受限网站"
-  wetv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WeTV/WeTV.yaml
-    path: "./ruleset/bm7-WeTV.yaml"
-    interval: 87968
-    proxy: "\U0001F6AB 受限网站"
-  zee:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Zee/Zee.yaml
-    path: "./ruleset/bm7-Zee.yaml"
-    interval: 88013
-    proxy: "\U0001F6AB 受限网站"
-  cbs:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CBS/CBS.yaml
-    path: "./ruleset/bm7-CBS.yaml"
-    interval: 87975
-    proxy: "\U0001F6AB 受限网站"
-  nbc:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/NBC/NBC.yaml
-    path: "./ruleset/bm7-NBC.yaml"
-    interval: 87990
-    proxy: "\U0001F6AB 受限网站"
-  pbs:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PBS/PBS.yaml
-    path: "./ruleset/bm7-PBS.yaml"
-    interval: 88022
-    proxy: "\U0001F6AB 受限网站"
-  attwatchtv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ATTWatchTV/ATTWatchTV.yaml
-    path: "./ruleset/bm7-ATTWatchTV.yaml"
-    interval: 88074
-    proxy: "\U0001F6AB 受限网站"
-  fox:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Fox/Fox.yaml
-    path: "./ruleset/bm7-Fox.yaml"
-    interval: 88081
-    proxy: "\U0001F6AB 受限网站"
-  fubotv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/FuboTV/FuboTV.yaml
-    path: "./ruleset/bm7-FuboTV.yaml"
-    interval: 88100
-    proxy: "\U0001F6AB 受限网站"
-  sling:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Sling/Sling.yaml
-    path: "./ruleset/bm7-Sling.yaml"
-    interval: 88103
-    proxy: "\U0001F6AB 受限网站"
-  soundcloud:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SoundCloud/SoundCloud.yaml
-    path: "./ruleset/bm7-SoundCloud.yaml"
-    interval: 88085
-    proxy: "\U0001F6AB 受限网站"
-  pandora:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Pandora/Pandora.yaml
-    path: "./ruleset/bm7-Pandora.yaml"
-    interval: 88131
-    proxy: "\U0001F6AB 受限网站"
-  pandoratv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PandoraTV/PandoraTV.yaml
-    path: "./ruleset/bm7-PandoraTV.yaml"
-    interval: 88163
-    proxy: "\U0001F6AB 受限网站"
-  tidal:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TIDAL/TIDAL.yaml
-    path: "./ruleset/bm7-TIDAL.yaml"
-    interval: 88128
-    proxy: "\U0001F6AB 受限网站"
-  vimeo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Vimeo/Vimeo.yaml
-    path: "./ruleset/bm7-Vimeo.yaml"
-    interval: 88156
-    proxy: "\U0001F6AB 受限网站"
-  dailymotion:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Dailymotion/Dailymotion.yaml
-    path: "./ruleset/bm7-Dailymotion.yaml"
-    interval: 88176
-    proxy: "\U0001F6AB 受限网站"
-  deezer:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Deezer/Deezer.yaml
-    path: "./ruleset/bm7-Deezer.yaml"
-    interval: 88197
-    proxy: "\U0001F6AB 受限网站"
-  discoveryplus:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DiscoveryPlus/DiscoveryPlus.yaml
-    path: "./ruleset/bm7-DiscoveryPlus.yaml"
-    interval: 88188
-    proxy: "\U0001F6AB 受限网站"
-  overcast:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Overcast/Overcast.yaml
-    path: "./ruleset/bm7-Overcast.yaml"
-    interval: 88212
-    proxy: "\U0001F6AB 受限网站"
-  americasvoice:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Americasvoice/Americasvoice.yaml
-    path: "./ruleset/bm7-Americasvoice.yaml"
-    interval: 88217
-    proxy: "\U0001F6AB 受限网站"
-  cake:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Cake/Cake.yaml
-    path: "./ruleset/bm7-Cake.yaml"
-    interval: 88236
-    proxy: "\U0001F6AB 受限网站"
-  dood:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Dood/Dood.yaml
-    path: "./ruleset/bm7-Dood.yaml"
-    interval: 88257
-    proxy: "\U0001F6AB 受限网站"
-  ehgallery:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/EHGallery/EHGallery.yaml
-    path: "./ruleset/bm7-EHGallery.yaml"
-    interval: 88314
-    proxy: "\U0001F6AB 受限网站"
-  lastfm:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LastFM/LastFM.yaml
-    path: "./ruleset/bm7-LastFM.yaml"
-    interval: 88285
-    proxy: "\U0001F6AB 受限网站"
-  emby:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Emby/Emby.yaml
-    path: "./ruleset/bm7-Emby.yaml"
-    interval: 88334
-    proxy: "\U0001F6AB 受限网站"
-  mytvsuper:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/myTVSUPER/myTVSUPER.yaml
-    path: "./ruleset/bm7-myTVSUPER.yaml"
-    interval: 88346
-    proxy: "\U0001F6AB 受限网站"
-  tvb:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TVB/TVB.yaml
-    path: "./ruleset/bm7-TVB.yaml"
-    interval: 88367
-    proxy: "\U0001F6AB 受限网站"
-  encoretvb:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/EncoreTVB/EncoreTVB.yaml
-    path: "./ruleset/bm7-EncoreTVB.yaml"
-    interval: 88375
-    proxy: "\U0001F6AB 受限网站"
-  nowe:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/NowE/NowE.yaml
-    path: "./ruleset/bm7-NowE.yaml"
-    interval: 88386
-    proxy: "\U0001F6AB 受限网站"
-  rthk:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/RTHK/RTHK.yaml
-    path: "./ruleset/bm7-RTHK.yaml"
-    interval: 88373
-    proxy: "\U0001F6AB 受限网站"
-  cabletv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CableTV/CableTV.yaml
-    path: "./ruleset/bm7-CableTV.yaml"
-    interval: 88410
-    proxy: "\U0001F6AB 受限网站"
-  moov:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MOOV/MOOV.yaml
-    path: "./ruleset/bm7-MOOV.yaml"
-    interval: 88396
-    proxy: "\U0001F6AB 受限网站"
-  litv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LiTV/LiTV.yaml
-    path: "./ruleset/bm7-LiTV.yaml"
-    interval: 88434
-    proxy: "\U0001F6AB 受限网站"
-  friday:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/friDay/friDay.yaml
-    path: "./ruleset/bm7-friDay.yaml"
-    interval: 88475
-    proxy: "\U0001F6AB 受限网站"
-  hamivideo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HamiVideo/HamiVideo.yaml
-    path: "./ruleset/bm7-HamiVideo.yaml"
-    interval: 88451
-    proxy: "\U0001F6AB 受限网站"
-  linetv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LineTV/LineTV.yaml
-    path: "./ruleset/bm7-LineTV.yaml"
-    interval: 88499
-    proxy: "\U0001F6AB 受限网站"
-  vidoltv:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/VidolTV/VidolTV.yaml
-    path: "./ruleset/bm7-VidolTV.yaml"
-    interval: 88474
-    proxy: "\U0001F6AB 受限网站"
-  taiwangood:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TaiWanGood/TaiWanGood.yaml
-    path: "./ruleset/bm7-TaiWanGood.yaml"
-    interval: 88525
-    proxy: "\U0001F6AB 受限网站"
-  cht:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CHT/CHT.yaml
-    path: "./ruleset/bm7-CHT.yaml"
-    interval: 88543
-    proxy: "\U0001F6AB 受限网站"
-  dmm:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DMM/DMM.yaml
-    path: "./ruleset/bm7-DMM.yaml"
-    interval: 88559
-    proxy: "\U0001F6AB 受限网站"
-  tver:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TVer/TVer.yaml
-    path: "./ruleset/bm7-TVer.yaml"
-    interval: 88571
-    proxy: "\U0001F6AB 受限网站"
-  niconico:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Niconico/Niconico.yaml
-    path: "./ruleset/bm7-Niconico.yaml"
-    interval: 88586
-    proxy: "\U0001F6AB 受限网站"
-  rakuten:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Rakuten/Rakuten.yaml
-    path: "./ruleset/bm7-Rakuten.yaml"
-    interval: 88563
-    proxy: "\U0001F6AB 受限网站"
-  japonx:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Japonx/Japonx.yaml
-    path: "./ruleset/bm7-Japonx.yaml"
-    interval: 88595
-    proxy: "\U0001F6AB 受限网站"
-  nikkei:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Nikkei/Nikkei.yaml
-    path: "./ruleset/bm7-Nikkei.yaml"
-    interval: 88645
-    proxy: "\U0001F6AB 受限网站"
-  itv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ITV/ITV.yaml
-    path: "./ruleset/bm7-ITV.yaml"
-    interval: 88608
-    proxy: "\U0001F6AB 受限网站"
-  all4:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/All4/All4.yaml
-    path: "./ruleset/bm7-All4.yaml"
-    interval: 88656
-    proxy: "\U0001F6AB 受限网站"
-  my5:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/My5/My5.yaml
-    path: "./ruleset/bm7-My5.yaml"
-    interval: 88658
-    proxy: "\U0001F6AB 受限网站"
-  skygo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SkyGO/SkyGO.yaml
-    path: "./ruleset/bm7-SkyGO.yaml"
-    interval: 88664
-    proxy: "\U0001F6AB 受限网站"
-  britboxuk:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BritboxUK/BritboxUK.yaml
-    path: "./ruleset/bm7-BritboxUK.yaml"
-    interval: 88668
-    proxy: "\U0001F6AB 受限网站"
-  londonreal:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LondonReal/LondonReal.yaml
-    path: "./ruleset/bm7-LondonReal.yaml"
-    interval: 88703
-    proxy: "\U0001F6AB 受限网站"
-  qobuz:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Qobuz/Qobuz.yaml
-    path: "./ruleset/bm7-Qobuz.yaml"
-    interval: 88695
-    proxy: "\U0001F6AB 受限网站"
-  steamcn:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SteamCN/SteamCN.yaml
-    path: "./ruleset/bm7-SteamCN.yaml"
-    interval: 88721
-    proxy: "\U0001F6AB 受限网站"
-  wanmeishijie:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WanMeiShiJie/WanMeiShiJie.yaml
-    path: "./ruleset/bm7-WanMeiShiJie.yaml"
-    interval: 88729
-    proxy: "\U0001F6AB 受限网站"
-  wankahuanju:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WanKaHuanJu/WanKaHuanJu.yaml
-    path: "./ruleset/bm7-WanKaHuanJu.yaml"
-    interval: 88754
-    proxy: "\U0001F6AB 受限网站"
-  majsoul:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Majsoul/Majsoul.yaml
-    path: "./ruleset/bm7-Majsoul.yaml"
-    interval: 88774
-    proxy: "\U0001F6AB 受限网站"
-  rockstar:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Rockstar/Rockstar.yaml
-    path: "./ruleset/bm7-Rockstar.yaml"
-    interval: 88822
-    proxy: "\U0001F6AB 受限网站"
-  riot:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Riot/Riot.yaml
-    path: "./ruleset/bm7-Riot.yaml"
-    interval: 88824
-    proxy: "\U0001F6AB 受限网站"
-  gog:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Gog/Gog.yaml
-    path: "./ruleset/bm7-Gog.yaml"
-    interval: 88829
-    proxy: "\U0001F6AB 受限网站"
-  supercell:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Supercell/Supercell.yaml
-    path: "./ruleset/bm7-Supercell.yaml"
-    interval: 88873
-    proxy: "\U0001F6AB 受限网站"
-  garena:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Garena/Garena.yaml
-    path: "./ruleset/bm7-Garena.yaml"
-    interval: 88833
-    proxy: "\U0001F6AB 受限网站"
-  hoyoverse:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HoYoverse/HoYoverse.yaml
-    path: "./ruleset/bm7-HoYoverse.yaml"
-    interval: 88903
-    proxy: "\U0001F6AB 受限网站"
-  ubi:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/UBI/UBI.yaml
-    path: "./ruleset/bm7-UBI.yaml"
-    interval: 88883
-    proxy: "\U0001F6AB 受限网站"
-  wildrift:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WildRift/WildRift.yaml
-    path: "./ruleset/bm7-WildRift.yaml"
-    interval: 88900
-    proxy: "\U0001F6AB 受限网站"
-  sony:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Sony/Sony.yaml
-    path: "./ruleset/bm7-Sony.yaml"
-    interval: 88901
-    proxy: "\U0001F6AB 受限网站"
-  yandex:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Yandex/Yandex.yaml
-    path: "./ruleset/bm7-Yandex.yaml"
-    interval: 88922
-    proxy: "\U0001F6AB 受限网站"
-  naver:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Naver/Naver.yaml
-    path: "./ruleset/bm7-Naver.yaml"
-    interval: 88997
-    proxy: "\U0001F6AB 受限网站"
-  scholar:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Scholar/Scholar.yaml
-    path: "./ruleset/bm7-Scholar.yaml"
-    interval: 89020
-    proxy: "\U0001F6AB 受限网站"
-  developer:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Developer/Developer.yaml
-    path: "./ruleset/bm7-Developer.yaml"
-    interval: 89033
-    proxy: "\U0001F6AB 受限网站"
-  python:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Python/Python.yaml
-    path: "./ruleset/bm7-Python.yaml"
-    interval: 89030
-    proxy: "\U0001F6AB 受限网站"
-  gitbook:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GitBook/GitBook.yaml
-    path: "./ruleset/bm7-GitBook.yaml"
-    interval: 89022
-    proxy: "\U0001F6AB 受限网站"
-  jfrog:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Jfrog/Jfrog.yaml
-    path: "./ruleset/bm7-Jfrog.yaml"
-    interval: 89033
-    proxy: "\U0001F6AB 受限网站"
-  sublimetext:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/SublimeText/SublimeText.yaml
-    path: "./ruleset/bm7-SublimeText.yaml"
-    interval: 89048
-    proxy: "\U0001F6AB 受限网站"
-  wordpress:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Wordpress/Wordpress.yaml
-    path: "./ruleset/bm7-Wordpress.yaml"
-    interval: 89099
-    proxy: "\U0001F6AB 受限网站"
-  wix:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WIX/WIX.yaml
-    path: "./ruleset/bm7-WIX.yaml"
-    interval: 89124
-    proxy: "\U0001F6AB 受限网站"
-  cisco:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Cisco/Cisco.yaml
-    path: "./ruleset/bm7-Cisco.yaml"
-    interval: 89107
-    proxy: "\U0001F6AB 受限网站"
-  ibm:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/IBM/IBM.yaml
-    path: "./ruleset/bm7-IBM.yaml"
-    interval: 89102
-    proxy: "\U0001F6AB 受限网站"
-  oracle:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Oracle/Oracle.yaml
-    path: "./ruleset/bm7-Oracle.yaml"
-    interval: 89126
-    proxy: "\U0001F6AB 受限网站"
-  unity:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Unity/Unity.yaml
-    path: "./ruleset/bm7-Unity.yaml"
-    interval: 89152
-    proxy: "\U0001F6AB 受限网站"
-  microsoftedge:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MicrosoftEdge/MicrosoftEdge.yaml
-    path: "./ruleset/bm7-MicrosoftEdge.yaml"
-    interval: 89172
-    proxy: "\U0001F6AB 受限网站"
-  appstore:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppStore/AppStore.yaml
-    path: "./ruleset/bm7-AppStore.yaml"
-    interval: 89193
-    proxy: "\U0001F6AB 受限网站"
-  appletv:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleTV/AppleTV.yaml
-    path: "./ruleset/bm7-AppleTV.yaml"
-    interval: 89194
-    proxy: "\U0001F6AB 受限网站"
-  applenews:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleNews/AppleNews.yaml
-    path: "./ruleset/bm7-AppleNews.yaml"
-    interval: 89200
-    proxy: "\U0001F6AB 受限网站"
-  appledev:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleDev/AppleDev.yaml
-    path: "./ruleset/bm7-AppleDev.yaml"
-    interval: 89260
-    proxy: "\U0001F6AB 受限网站"
-  appleproxy:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleProxy/AppleProxy.yaml
-    path: "./ruleset/bm7-AppleProxy.yaml"
-    interval: 89254
-    proxy: "\U0001F6AB 受限网站"
-  siri:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Siri/Siri.yaml
-    path: "./ruleset/bm7-Siri.yaml"
-    interval: 89265
-    proxy: "\U0001F6AB 受限网站"
-  testflight:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/TestFlight/TestFlight.yaml
-    path: "./ruleset/bm7-TestFlight.yaml"
-    interval: 89282
-    proxy: "\U0001F6AB 受限网站"
-  applefirmware:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/AppleFirmware/AppleFirmware.yaml
-    path: "./ruleset/bm7-AppleFirmware.yaml"
-    interval: 89305
-    proxy: "\U0001F6AB 受限网站"
-  findmy:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/FindMy/FindMy.yaml
-    path: "./ruleset/bm7-FindMy.yaml"
-    interval: 89291
-    proxy: "\U0001F6AB 受限网站"
-  download:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Download/Download.yaml
-    path: "./ruleset/bm7-Download.yaml"
-    interval: 89335
-    proxy: "\U0001F6AB 受限网站"
-  ubuntu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Ubuntu/Ubuntu.yaml
-    path: "./ruleset/bm7-Ubuntu.yaml"
-    interval: 89345
-    proxy: "\U0001F6AB 受限网站"
-  mozilla:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Mozilla/Mozilla.yaml
-    path: "./ruleset/bm7-Mozilla.yaml"
-    interval: 89368
-    proxy: "\U0001F6AB 受限网站"
-  apkpure:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Apkpure/Apkpure.yaml
-    path: "./ruleset/bm7-Apkpure.yaml"
-    interval: 89352
-    proxy: "\U0001F6AB 受限网站"
-  android:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Android/Android.yaml
-    path: "./ruleset/bm7-Android.yaml"
-    interval: 89411
-    proxy: "\U0001F6AB 受限网站"
-  googlefcm:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GoogleFCM/GoogleFCM.yaml
-    path: "./ruleset/bm7-GoogleFCM.yaml"
-    interval: 89382
-    proxy: "\U0001F6AB 受限网站"
-  intel:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Intel/Intel.yaml
-    path: "./ruleset/bm7-Intel.yaml"
-    interval: 89435
-    proxy: "\U0001F6AB 受限网站"
-  nvidia:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Nvidia/Nvidia.yaml
-    path: "./ruleset/bm7-Nvidia.yaml"
-    interval: 89446
-    proxy: "\U0001F6AB 受限网站"
-  dell:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Dell/Dell.yaml
-    path: "./ruleset/bm7-Dell.yaml"
-    interval: 89456
-    proxy: "\U0001F6AB 受限网站"
-  hp:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/HP/HP.yaml
-    path: "./ruleset/bm7-HP.yaml"
-    interval: 89477
-    proxy: "\U0001F6AB 受限网站"
-  canon:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Canon/Canon.yaml
-    path: "./ruleset/bm7-Canon.yaml"
-    interval: 89485
-    proxy: "\U0001F6AB 受限网站"
-  lg:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/LG/LG.yaml
-    path: "./ruleset/bm7-LG.yaml"
-    interval: 89499
-    proxy: "\U0001F6AB 受限网站"
-  cloudflare:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Cloudflare/Cloudflare.yaml
-    path: "./ruleset/bm7-Cloudflare.yaml"
-    interval: 89494
-    proxy: "\U0001F6AB 受限网站"
-  akamai:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Akamai/Akamai.yaml
-    path: "./ruleset/bm7-Akamai.yaml"
-    interval: 89513
-    proxy: "\U0001F6AB 受限网站"
-  digicert:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/DigiCert/DigiCert.yaml
-    path: "./ruleset/bm7-DigiCert.yaml"
-    interval: 89535
-    proxy: "\U0001F6AB 受限网站"
-  globalsign:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GlobalSign/GlobalSign.yaml
-    path: "./ruleset/bm7-GlobalSign.yaml"
-    interval: 89547
-    proxy: "\U0001F6AB 受限网站"
-  sectigo:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Sectigo/Sectigo.yaml
-    path: "./ruleset/bm7-Sectigo.yaml"
-    interval: 89550
-    proxy: "\U0001F6AB 受限网站"
-  brightcove:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BrightCove/BrightCove.yaml
-    path: "./ruleset/bm7-BrightCove.yaml"
-    interval: 89551
-    proxy: "\U0001F6AB 受限网站"
-  jwplayer:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Jwplayer/Jwplayer.yaml
-    path: "./ruleset/bm7-Jwplayer.yaml"
-    interval: 89618
-    proxy: "\U0001F6AB 受限网站"
-  privatetracker:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/PrivateTracker/PrivateTracker.yaml
-    path: "./ruleset/bm7-PrivateTracker.yaml"
-    interval: 89594
-    proxy: "\U0001F6AB 受限网站"
-  cnn:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/CNN/CNN.yaml
-    path: "./ruleset/bm7-CNN.yaml"
-    interval: 89641
-    proxy: "\U0001F6AB 受限网站"
-  nytimes:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/NYTimes/NYTimes.yaml
-    path: "./ruleset/bm7-NYTimes.yaml"
-    interval: 89655
-    proxy: "\U0001F6AB 受限网站"
-  bloomberg:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Bloomberg/Bloomberg.yaml
-    path: "./ruleset/bm7-Bloomberg.yaml"
-    interval: 89666
-    proxy: "\U0001F6AB 受限网站"
-  ebay:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/eBay/eBay.yaml
-    path: "./ruleset/bm7-eBay.yaml"
-    interval: 89673
-    proxy: "\U0001F6AB 受限网站"
-  nike:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Nike/Nike.yaml
-    path: "./ruleset/bm7-Nike.yaml"
-    interval: 89699
-    proxy: "\U0001F6AB 受限网站"
-  adobe:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Adobe/Adobe.yaml
-    path: "./ruleset/bm7-Adobe.yaml"
-    interval: 89678
-    proxy: "\U0001F6AB 受限网站"
-  samsung:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Samsung/Samsung.yaml
-    path: "./ruleset/bm7-Samsung.yaml"
-    interval: 89696
-    proxy: "\U0001F6AB 受限网站"
-  tesla:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Tesla/Tesla.yaml
-    path: "./ruleset/bm7-Tesla.yaml"
-    interval: 89702
-    proxy: "\U0001F6AB 受限网站"
-  dropbox:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Dropbox/Dropbox.yaml
-    path: "./ruleset/bm7-Dropbox.yaml"
-    interval: 89762
-    proxy: "\U0001F6AB 受限网站"
-  mega:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/MEGA/MEGA.yaml
-    path: "./ruleset/bm7-MEGA.yaml"
-    interval: 89762
-    proxy: "\U0001F6AB 受限网站"
-  wikipedia:
-    type: http
-    behavior: classical
-    url: https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Wikipedia/Wikipedia.yaml
-    path: "./ruleset/bm7-Wikipedia.yaml"
-    interval: 89758
-    proxy: "\U0001F6AB 受限网站"
-  duolingo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Duolingo/Duolingo.yaml
-    path: "./ruleset/bm7-Duolingo.yaml"
-    interval: 89784
-    proxy: "\U0001F6AB 受限网站"
-  sukka-phishing:
-    type: http
-    behavior: domain
-    format: text
-    url: https://ruleset.skk.moe/Clash/domainset/reject_phishing.txt
-    path: "./ruleset/sukka-reject-phishing.txt"
-    interval: 89786
-    proxy: "\U0001F6AB 受限网站"
-  hagezi-tif:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-033-social-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-033-social-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-033-social-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-033-social-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-033-social-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-033-social-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-033-social-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-034-cn-site-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MiHomoer/MiHomo-Hagezi@release/HageziUltimate.mrs
-    path: "./ruleset/hagezi-tif.mrs"
-    interval: 89809
-    proxy: "\U0001F6AB 受限网站"
-  szkane-ai:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/AiDomain.list
-    path: "./ruleset/szkane-AiDomain.list"
-    interval: 89808
-    proxy: "\U0001F6AB 受限网站"
-  # v5.2.7 FIX#27-P1: upstream CiciAi.list 含 USER-AGENT,TikTok* (mihomo classical 触发
-  # `parse classical rule [USER-AGENT,TikTok*] error: unsupported rule type: USER-AGENT`)
-  # 改用本仓库 mirrors/ 清洗副本；TikTok 域名已由 geosite:tiktok 覆盖。
-  szkane-ciciai:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/CiciAi.list
-    path: "./ruleset/szkane-CiciAi.list"
-    interval: 89844
-    proxy: "\U0001F6AB 受限网站"
-  szkane-web3:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Web3.list
-    path: "./ruleset/szkane-Web3.list"
-    interval: 89850
-    proxy: "\U0001F6AB 受限网站"
-  szkane-developer:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Developer.list
-    path: "./ruleset/szkane-Developer.list"
-    interval: 89873
-    proxy: "\U0001F6AB 受限网站"
-  szkane-khan:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Khan.list
-    path: "./ruleset/szkane-Khan.list"
-    interval: 89873
-    proxy: "\U0001F6AB 受限网站"
-  szkane-edutools:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Edutools.list
-    path: "./ruleset/szkane-Edutools.list"
-    interval: 89927
-    proxy: "\U0001F6AB 受限网站"
-  # v5.2.7 FIX#27-P1: upstream UK.list 含 USER-AGENT,BBCiPlayer* (mihomo classical 触发
-  # `parse classical rule [USER-AGENT,BBCiPlayer*] error: unsupported rule type: USER-AGENT`)
-  # 改用本仓库 mirrors/ 清洗副本；BBC 域名已由 geosite:bbc 覆盖。
-  szkane-uk:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/UK.list
-    path: "./ruleset/szkane-UK.list"
-    interval: 89896
-    proxy: "\U0001F6AB 受限网站"
-  szkane-bilihmt:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/BilibiliHMT.list
-    path: "./ruleset/szkane-BilibiliHMT.list"
-    interval: 89933
-    proxy: "\U0001F6AB 受限网站"
-  szkane-netflixip:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/NetflixIP.list
-    path: "./ruleset/szkane-NetflixIP.list"
-    interval: 89941
-    proxy: "\U0001F6AB 受限网站"
-  szkane-proxygfw:
-    type: http
-    behavior: classical
-    format: text
-    url: https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/ProxyGFWlist.list
-    path: "./ruleset/szkane-ProxyGFWlist.list"
-    interval: 89998
-    proxy: "\U0001F6AB 受限网站"
-  loyalsoldier-gfw:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-034-cn-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-034-cn-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-035-social-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/gfw.mrs
-    path: "./ruleset/meta-gfw.mrs"
-    interval: 89981
-    proxy: "\U0001F6AB 受限网站"
-  loyalsoldier-greatfire:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-035-social-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-035-social-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-036-work-domain:
     type: http
     behavior: domain
     format: mrs
-    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/greatfire.mrs
-    path: "./ruleset/meta-greatfire.mrs"
-    interval: 90000
-    proxy: "\U0001F6AB 受限网站"
-  acc-appleai:
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-036-work-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-036-work-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-036-work-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-036-work-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/AppleAI/AppleAI.yaml
-    path: "./ruleset/acc-AppleAI.yaml"
-    interval: 90028
-    proxy: "\U0001F6AB 受限网站"
-  # v5.2.7 FIX#27-P1: upstream Grok.yaml 含 `IP-CIDR         , 17.253.4.125`
-  # (多余空格 + 缺 CIDR 掩码 → `parse classical rule [IP-CIDR , 17.253.4.125] error: payloadRule error`)
-  # 改用本仓库 mirrors/ 清洗副本（仅删该行 + 规整空格）。
-  acc-grok:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/Grok.yaml
-    path: "./ruleset/acc-Grok.yaml"
-    interval: 90049
-    proxy: "\U0001F6AB 受限网站"
-  acc-gemini:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Gemini/Gemini.yaml
-    path: "./ruleset/acc-Gemini.yaml"
-    interval: 90072
-    proxy: "\U0001F6AB 受限网站"
-  acc-copilot:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Copilot/Copilot.yaml
-    path: "./ruleset/acc-Copilot.yaml"
-    interval: 90038
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-us:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankUS.yaml
-    path: "./ruleset/acc-BankUS.yaml"
-    interval: 90071
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-uk:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankUK.yaml
-    path: "./ruleset/acc-BankUK.yaml"
-    interval: 90079
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-hk:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankHK.yaml
-    path: "./ruleset/acc-BankHK.yaml"
-    interval: 90075
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-sg:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankSG.yaml
-    path: "./ruleset/acc-BankSG.yaml"
-    interval: 90134
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-jp:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankJP.yaml
-    path: "./ruleset/acc-BankJP.yaml"
-    interval: 90138
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-au:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankAU.yaml
-    path: "./ruleset/acc-BankAU.yaml"
-    interval: 90146
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-ca:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankCA.yaml
-    path: "./ruleset/acc-BankCA.yaml"
-    interval: 90154
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-de:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankDE.yaml
-    path: "./ruleset/acc-BankDE.yaml"
-    interval: 90205
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-nl:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankNL.yaml
-    path: "./ruleset/acc-BankNL.yaml"
-    interval: 90223
-    proxy: "\U0001F6AB 受限网站"
-  acc-bank-fr:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Bank/BankFR.yaml
-    path: "./ruleset/acc-BankFR.yaml"
-    interval: 90205
-    proxy: "\U0001F6AB 受限网站"
-  acc-vf-paypal:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/VirtualFinance/Paypal.yaml
-    path: "./ruleset/acc-Paypal.yaml"
-    interval: 90220
-    proxy: "\U0001F6AB 受限网站"
-  acc-vf-wise:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/VirtualFinance/Wise.yaml
-    path: "./ruleset/acc-Wise.yaml"
-    interval: 90254
-    proxy: "\U0001F6AB 受限网站"
-  acc-vf-monzo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/VirtualFinance/Monzo.yaml
-    path: "./ruleset/acc-Monzo.yaml"
-    interval: 90231
-    proxy: "\U0001F6AB 受限网站"
-  acc-vf-revolut:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/VirtualFinance/Revolut.yaml
-    path: "./ruleset/acc-Revolut.yaml"
-    interval: 90296
-    proxy: "\U0001F6AB 受限网站"
-  acc-applenews:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/AppleNews/AppleNews.yaml
-    path: "./ruleset/acc-AppleNews.yaml"
-    interval: 90270
-    proxy: "\U0001F6AB 受限网站"
-  acc-apple:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Apple/Apple.yaml
-    path: "./ruleset/acc-Apple.yaml"
-    interval: 90321
-    proxy: "\U0001F6AB 受限网站"
-  acc-microsoftapps:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/MicrosoftAPPs/MicrosoftAPPs.yaml
-    path: "./ruleset/acc-MicrosoftAPPs.yaml"
-    interval: 90323
-    proxy: "\U0001F6AB 受限网站"
-  acc-signal:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Signal/Signal.yaml
-    path: "./ruleset/acc-Signal.yaml"
-    interval: 90316
-    proxy: "\U0001F6AB 受限网站"
-  acc-rustdesk:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/RustDesk/RustDesk.yaml
-    path: "./ruleset/acc-RustDesk.yaml"
-    interval: 90359
-    proxy: "\U0001F6AB 受限网站"
-  acc-parsec:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Parsec/Parsec.yaml
-    path: "./ruleset/acc-Parsec.yaml"
-    interval: 90379
-    proxy: "\U0001F6AB 受限网站"
-  acc-alipan:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Alipan/Alipan.yaml
-    path: "./ruleset/acc-Alipan.yaml"
-    interval: 90376
-    proxy: "\U0001F6AB 受限网站"
-  acc-baidunetdisk:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/BaiduNetDisk/BaiduNetDisk.yaml
-    path: "./ruleset/acc-BaiduNetDisk.yaml"
-    interval: 90370
-    proxy: "\U0001F6AB 受限网站"
-  acc-weiyun:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/WeiYun/WeiYun.yaml
-    path: "./ruleset/acc-WeiYun.yaml"
-    interval: 90425
-    proxy: "\U0001F6AB 受限网站"
-  acc-kwai:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Kwai/Kwai.yaml
-    path: "./ruleset/acc-Kwai.yaml"
-    interval: 90404
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-bilibili:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationBiliBili.yaml
-    path: "./ruleset/acc-FakeLocationBiliBili.yaml"
-    interval: 90405
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-douyin:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationDouYin.yaml
-    path: "./ruleset/acc-FakeLocationDouYin.yaml"
-    interval: 90450
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-kuaishou:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationKuaiShou.yaml
-    path: "./ruleset/acc-FakeLocationKuaiShou.yaml"
-    interval: 90489
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-xiaohongshu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationXiaoHongShu.yaml
-    path: "./ruleset/acc-FakeLocationXiaoHongShu.yaml"
-    interval: 90482
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-xigua:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationXiGua.yaml
-    path: "./ruleset/acc-FakeLocationXiGua.yaml"
-    interval: 90489
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-weibo:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationWeiBo.yaml
-    path: "./ruleset/acc-FakeLocationWeiBo.yaml"
-    interval: 90488
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-zhihu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationZhiHu.yaml
-    path: "./ruleset/acc-FakeLocationZhiHu.yaml"
-    interval: 90505
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-tieba:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationTieBa.yaml
-    path: "./ruleset/acc-FakeLocationTieBa.yaml"
-    interval: 90528
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-douban:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationDouBan.yaml
-    path: "./ruleset/acc-FakeLocationDouBan.yaml"
-    interval: 90560
-    proxy: "\U0001F6AB 受限网站"
-  acc-fl-xianyu:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/FakeLocation/FakeLocationXianYu.yaml
-    path: "./ruleset/acc-FakeLocationXianYu.yaml"
-    interval: 90540
-    proxy: "\U0001F6AB 受限网站"
-  acc-hijackingplus:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/HijackingPlus/HijackingPlus.yaml
-    path: "./ruleset/acc-HijackingPlus.yaml"
-    interval: 90594
-    proxy: "\U0001F6AB 受限网站"
-  acc-blockhttpdnsplus:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/BlockHttpDNSPlus/BlockHttpDNSPlus.yaml
-    path: "./ruleset/acc-BlockHttpDNSPlus.yaml"
-    interval: 90613
-    proxy: "\U0001F6AB 受限网站"
-  acc-prerepaireasyprivacy:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/PreRepairEasyPrivacy/PreRepairEasyPrivacy.yaml
-    path: "./ruleset/acc-PreRepairEasyPrivacy.yaml"
-    interval: 90585
-    proxy: "\U0001F6AB 受限网站"
-  acc-unsupportvpn:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/UnsupportVPN/UnsupportVPN.yaml
-    path: "./ruleset/acc-UnsupportVPN.yaml"
-    interval: 90635
-    proxy: "\U0001F6AB 受限网站"
-  acc-macappupgrade:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/MacAppUpgrade/MacAppUpgrade.yaml
-    path: "./ruleset/acc-MacAppUpgrade.yaml"
-    interval: 90615
-    proxy: "\U0001F6AB 受限网站"
-  acc-fastly:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Fastly/Fastly.yaml
-    path: "./ruleset/acc-Fastly.yaml"
-    interval: 90669
-    proxy: "\U0001F6AB 受限网站"
-  # v5.2.5 FIX#23-P1: acc-geositecn / acc-china 删除（与 geosite:cn 纯重复）
-  acc-chinamax:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/ChinaMax/ChinaMax.yaml
-    path: "./ruleset/acc-ChinaMax.yaml"
-    interval: 90693
-    proxy: "\U0001F6AB 受限网站"
-  acc-homeip-us:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/HomeIP/HomeIPUS.yaml
-    path: "./ruleset/acc-HomeIPUS.yaml"
-    interval: 90703
-    proxy: "\U0001F6AB 受限网站"
-  acc-homeip-jp:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/HomeIP/HomeIPJP.yaml
-    path: "./ruleset/acc-HomeIPJP.yaml"
-    interval: 90762
-    proxy: "\U0001F6AB 受限网站"
-  acc-waybackmachine:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/WaybackMachine/WaybackMachine.yaml
-    path: "./ruleset/acc-WaybackMachine.yaml"
-    interval: 90730
-    proxy: "\U0001F6AB 受限网站"
-  acc-pornhub:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Pornhub/Pornhub.yaml
-    path: "./ruleset/acc-Pornhub.yaml"
-    interval: 90755
-    proxy: "\U0001F6AB 受限网站"
-  acc-aqara-cn:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Aqara/AqaraCN.yaml
-    path: "./ruleset/acc-AqaraCN.yaml"
-    interval: 90756
-    proxy: "\U0001F6AB 受限网站"
-  acc-aqara-global:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Aqara/AqaraGlobal.yaml
-    path: "./ruleset/acc-AqaraGlobal.yaml"
-    interval: 90781
-    proxy: "\U0001F6AB 受限网站"
-  acc-emuleserver:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/eMuleServer/eMuleServer.yaml
-    path: "./ruleset/acc-eMuleServer.yaml"
-    interval: 90803
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-east:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-036-work-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-037-direct-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_East_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_East.yaml"
-    interval: 90816
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-eastsouth:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-037-direct-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-037-direct-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-038-cnmedia-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_EastSouth_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_EastSouth.yaml"
-    interval: 90841
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-south:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-038-cnmedia-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-038-cnmedia-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-039-tiktok-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_South_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_South.yaml"
-    interval: 90866
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-central:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-039-tiktok-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-039-tiktok-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-040-youtube-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_Central_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_Central.yaml"
-    interval: 90865
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-west:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-040-youtube-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-040-youtube-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-041-netflix-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_West_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_West.yaml"
-    interval: 90869
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-asia-china:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-041-netflix-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-041-netflix-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-041-netflix-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-041-netflix-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-041-netflix-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-042-disney-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Asia_China_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Asia_China.yaml"
-    interval: 90928
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-america-north:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-042-disney-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-042-disney-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-042-disney-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-042-disney-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-042-disney-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-043-hbo-max-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_America_North_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-America_North.yaml"
-    interval: 90902
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-america-south:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-043-hbo-max-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-043-hbo-max-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-043-hbo-max-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-043-hbo-max-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-043-hbo-max-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-044-hulu-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_America_South_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-America_South.yaml"
-    interval: 90932
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-europe-west:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-044-hulu-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-044-hulu-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-044-hulu-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-044-hulu-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-044-hulu-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-045-prime-video-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Europe_West_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Europe_West.yaml"
-    interval: 90960
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-europe-east:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-045-prime-video-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-045-prime-video-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-045-prime-video-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-045-prime-video-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-045-prime-video-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-046-music-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Europe_East_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Europe_East.yaml"
-    interval: 90954
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-oceania:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-046-music-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-046-music-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-046-music-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-046-music-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-046-music-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-047-stream-hk-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Oceania_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Oceania.yaml"
-    interval: 90980
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-antarctica:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-047-stream-hk-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-047-stream-hk-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-047-stream-hk-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-047-stream-hk-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-047-stream-hk-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-048-stream-tw-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Antarctica_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Antarctica.yaml"
-    interval: 91002
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-africa-north:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-048-stream-tw-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-048-stream-tw-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-048-stream-tw-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-048-stream-tw-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-048-stream-tw-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-049-stream-jpkr-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Africa_North_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Africa_North.yaml"
-    interval: 91012
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-africa-south:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-049-stream-jpkr-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-049-stream-jpkr-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-049-stream-jpkr-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-049-stream-jpkr-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-049-stream-jpkr-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-050-stream-eu-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Africa_South_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Africa_South.yaml"
-    interval: 91047
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-africa-west:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-050-stream-eu-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-050-stream-eu-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-050-stream-eu-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-050-stream-eu-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-050-stream-eu-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-051-stream-other-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Africa_West_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Africa_West.yaml"
-    interval: 91043
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-africa-east:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-051-stream-other-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-051-stream-other-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-051-stream-other-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-051-stream-other-residual:
+    type: http
+    behavior: classical
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-051-stream-other-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-052-tools-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Africa_East_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Africa_East.yaml"
-    interval: 91029
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-d-africa-central:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-052-tools-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-052-tools-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-053-google-domain:
     type: http
     behavior: domain
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_Domain/GeoRouting_Africa_Central_ccTLD_Domain.yaml
-    path: "./ruleset/acc-GeoD-Africa_Central.yaml"
-    interval: 91084
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-east:
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-053-google-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-053-google-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-054-tools-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-054-tools-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-054-tools-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-054-tools-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-054-tools-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_East_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_East.yaml"
-    interval: 91073
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-eastsouth:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-054-tools-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-055-microsoft-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-055-microsoft-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-055-microsoft-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-055-microsoft-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_EastSouth_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_EastSouth.yaml"
-    interval: 91095
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-south:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-055-microsoft-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-055-microsoft-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-056-apple-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-056-apple-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-056-apple-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-056-apple-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-056-apple-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_South_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_South.yaml"
-    interval: 91131
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-central:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-056-apple-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-057-download-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-057-download-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-057-download-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-057-download-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-057-download-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_Central_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_Central.yaml"
-    interval: 91146
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-west:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-057-download-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-058-tracker-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-058-tracker-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-058-tracker-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-058-tracker-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-058-tracker-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_West_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_West.yaml"
-    interval: 91127
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-asia-china:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-058-tracker-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-059-gfw-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-059-gfw-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-059-gfw-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-059-gfw-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-059-gfw-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Asia_China_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Asia_China.yaml"
-    interval: 91125
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-america-north:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-059-gfw-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-060-game-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-060-game-cn-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-060-game-cn-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-061-game-intl-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-061-game-intl-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-061-game-intl-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-061-game-intl-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-061-game-intl-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_America_North_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-America_North.yaml"
-    interval: 91175
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-america-south:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-061-game-intl-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-062-intl-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-062-intl-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-062-intl-site-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-062-intl-site-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-062-intl-site-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_America_South_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-America_South.yaml"
-    interval: 91175
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-europe-west:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-062-intl-site-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-063-payments-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-063-payments-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-063-payments-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-064-cnmedia-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-064-cnmedia-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-064-cnmedia-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-064-cnmedia-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-064-cnmedia-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Europe_West_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Europe_West.yaml"
-    interval: 91171
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-europe-east:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-064-cnmedia-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-065-cn-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-065-cn-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-065-cn-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-065-cn-site-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-065-cn-site-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-065-cn-site-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-066-direct-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-066-direct-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-066-direct-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-067-cn-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-067-cn-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-067-cn-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-067-cn-site-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Europe_East_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Europe_East.yaml"
-    interval: 91201
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-oceania:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-067-cn-site-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-067-cn-site-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-068-intl-site-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-domain.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-068-intl-site-domain.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-068-intl-site-ipcidr:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-ipcidr.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-068-intl-site-ipcidr.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-068-intl-site-ipcidr-no-resolve:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-ipcidr-no-resolve.mrs?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-068-intl-site-ipcidr-no-resolve.mrs"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-068-intl-site-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Oceania_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Oceania.yaml"
-    interval: 91224
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-antarctica:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-068-intl-site-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-069-im-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Antarctica_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Antarctica.yaml"
-    interval: 91227
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-africa-north:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-069-im-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-069-im-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-070-netflix-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Africa_North_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Africa_North.yaml"
-    interval: 91248
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-africa-south:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-070-netflix-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-070-netflix-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-071-social-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Africa_South_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Africa_South.yaml"
-    interval: 91267
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-africa-west:
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-071-social-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-071-social-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
+  scki-fused-072-google-residual:
     type: http
     behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Africa_West_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Africa_West.yaml"
-    interval: 91272
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-africa-east:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Africa_East_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Africa_East.yaml"
-    interval: 91308
-    proxy: "\U0001F6AB 受限网站"
-  acc-geo-ip-africa-central:
-    type: http
-    behavior: classical
-    url: https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/GeoRouting_For_IP/GeoRouting_Africa_Central_GeoIP.yaml
-    path: "./ruleset/acc-GeoIP-Africa_Central.yaml"
-    interval: 91307
-    proxy: "\U0001F6AB 受限网站"
+    format: yaml
+    url: "https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-072-google-residual.yaml?scki=v6.0.13"
+    path: "./ruleset/v6.0.13/scki-fused-072-google-residual.yaml"
+    interval: 86400
+    proxy: "🚫 受限网站"
 rules:
-# Anti-ad false-positive allowlist: keep before all ad/phishing/TIF providers.
-# See docs/GEOSITE_COVERAGE_LEDGER.md for ownership and update rules.
-- "DOMAIN-SUFFIX,account.xiaomi.com,DIRECT"
-- "DOMAIN-SUFFIX,passport.xiaomi.com,DIRECT"
-- "DOMAIN-SUFFIX,micloud.xiaomi.com,DIRECT"
-- "DOMAIN,i.mi.com,DIRECT"
-- "DOMAIN,auth.be.sec.miui.com,DIRECT"
-- "DOMAIN,idm.api.io.mi.com,DIRECT"
-- "DOMAIN,api.installer.xiaomi.com,DIRECT"
-- "DOMAIN,flash.sec.miui.com,DIRECT"
-- "DOMAIN,mazu.sec.miui.com,DIRECT"
-- "DOMAIN,ccc.sys.miui.com,DIRECT"
-- "DOMAIN,register.xmpush.xiaomi.com,DIRECT"
-# v5.4.14 FIX#CF-R2: Sukka reject_phishing 当前包含 Cloudflare R2 存储域，需前置覆盖首匹配。
-- DOMAIN-SUFFIX,cloudflarestorage.com,🌐 国外网站
-# v5.4.16 FIX#149: anti-AD/DustinWin 当前包含 analytics.paddle.com；Antigravity 登录需放行 Paddle 许可/支付链路。
-- DOMAIN-SUFFIX,paddle.com,🏦 金融支付
-# v5.4.19 #2 借鉴 Proxy-override：国内推送 SDK 直连前置——jpush/umeng 被 jiguangtuisong/youmengchuangxiang 当 tracker 拦截，但承载合法 App 推送/消息功能，需 DIRECT（参照 P0-FIX#41 小米先例）。
-- "DOMAIN-SUFFIX,jpush.cn,DIRECT"
-- "DOMAIN-SUFFIX,jpush.io,DIRECT"
-- "DOMAIN,msg.umeng.com,DIRECT"
-# v5.4.22 GeTui(个推)推送 SDK 直连——延续 #2（被通用广告/隐私表当 tracker 拦截，承载 App 推送如米家）
-- "DOMAIN-SUFFIX,getui.com,DIRECT"
-- "DOMAIN-SUFFIX,getui.net,DIRECT"
-- "DOMAIN-SUFFIX,gepush.com,DIRECT"
-- "RULE-SET,anti-ad,\U0001F6D1 广告拦截"
-- "RULE-SET,sukka-phishing,\U0001F6D1 广告拦截"
-- "RULE-SET,hagezi-tif,\U0001F6D1 广告拦截"
-- "RULE-SET,acc-hijackingplus,\U0001F6D1 广告拦截"
-- "RULE-SET,acc-blockhttpdnsplus,\U0001F6D1 广告拦截"
-- "RULE-SET,acc-prerepaireasyprivacy,\U0001F6D1 广告拦截"
-- "RULE-SET,acc-unsupportvpn,\U0001F6D1 广告拦截"
-- "GEOSITE,category-ads-all,\U0001F6D1 广告拦截"
-- "RULE-SET,advertising,\U0001F6D1 广告拦截"
-- "RULE-SET,advertisingmitv,\U0001F6D1 广告拦截"
-- "RULE-SET,adobeactivation,\U0001F6D1 广告拦截"
-- "RULE-SET,blockhttpdns,\U0001F6D1 广告拦截"
-- "RULE-SET,domob,\U0001F6D1 广告拦截"
-- "RULE-SET,hijacking,\U0001F6D1 广告拦截"
-- "RULE-SET,jiguangtuisong,\U0001F6D1 广告拦截"
-- "RULE-SET,marketing,\U0001F6D1 广告拦截"
-- "RULE-SET,miuiprivacy,\U0001F6D1 广告拦截"
-- "RULE-SET,privacy,\U0001F6D1 广告拦截"
-- "RULE-SET,youmengchuangxiang,\U0001F6D1 广告拦截"
-  # v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——YouTube/Google/MS/Apple 白名单豁免，其余海外 QUIC REJECT
-- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),\U0001F4F9 YouTube"
-- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),\U0001F527 工具与服务"
-- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,microsoft)),Ⓜ️ 微软服务"
-- "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,apple)),\U0001F34E 苹果服务"
+- "RULE-SET,scki-fused-001-direct-domain,DIRECT"
+- "RULE-SET,scki-fused-002-intl-site-domain,🌐 国外网站"
+- "RULE-SET,scki-fused-003-payments-domain,🏦 金融支付"
+- "RULE-SET,scki-fused-004-ai-domain,🤖 AI 服务"
+- "RULE-SET,scki-fused-005-cnmedia-domain,📺 国内流媒体"
+- "RULE-SET,scki-fused-006-ad-domain,🛑 广告拦截"
+- "RULE-SET,scki-fused-006-ad-ipcidr,🛑 广告拦截"
+- "RULE-SET,scki-fused-006-ad-residual,🛑 广告拦截"
+- "RULE-SET,scki-fused-007-cn-site-domain,🏠 国内网站"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),📹 YouTube"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),🔍 Google 服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,microsoft)),Ⓜ️ 微软服务"
+- "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,apple)),🍎 苹果服务"
 - "AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT"
-- DST-PORT,7680,REJECT
-- GEOSITE,private,DIRECT
-- GEOIP,private,DIRECT,no-resolve
-- IP-CIDR,172.90.1.130/32,DIRECT,no-resolve
-- PROCESS-NAME,WorkPro.exe,DIRECT
-- PROCESS-NAME,GCUService.exe,DIRECT
-- PROCESS-NAME,GCUBridge.exe,DIRECT
-- PROCESS-NAME,CCUWinUI.exe,DIRECT
-- PROCESS-NAME,HipsDaemon.exe,DIRECT
-- PROCESS-NAME,gdphost.exe,DIRECT
-- PROCESS-NAME,gehsender.exe,DIRECT
-- PROCESS-NAME,GSCService.exe,DIRECT
-- DOMAIN,ip.cip.cc,DIRECT
-- PROCESS-NAME,gsupservice.exe,DIRECT
-- PROCESS-NAME,gchsvc.exe,DIRECT
-- DST-PORT,26880,DIRECT
-- DST-PORT,6540,DIRECT
-- DST-PORT,33068,DIRECT
-- DST-PORT,123,DIRECT
-- DST-PORT,3478,DIRECT
-- DST-PORT,3479,DIRECT
-- DST-PORT,5349,DIRECT
-- DST-PORT,19302,DIRECT
-- DST-PORT,19305,DIRECT
-- DST-PORT,19307,DIRECT
-- "PROCESS-NAME,QQ.exe,\U0001F3E0 国内网站"
-- "PROCESS-NAME,Weixin.exe,\U0001F3E0 国内网站"
-- "PROCESS-NAME,WeChat.exe,\U0001F3E0 国内网站"
-- PROCESS-NAME,Oray.exe,DIRECT
-- PROCESS-NAME,OrayService.exe,DIRECT
-- PROCESS-NAME,SunloginClient.exe,DIRECT
-- PROCESS-NAME,SunloginClient_Desktop.exe,DIRECT
-- PROCESS-NAME,SunloginClient_Service.exe,DIRECT
-- PROCESS-NAME,AweSun.exe,DIRECT
-- PROCESS-NAME,AweSunService.exe,DIRECT
-- PROCESS-NAME,NodeBaby.exe,DIRECT
-- PROCESS-NAME,Node Baby.exe,DIRECT
-- PROCESS-NAME,nblink.exe,DIRECT
-- PROCESS-NAME,nblink,DIRECT
-- PROCESS-NAME,owjdxb.exe,DIRECT
-- PROCESS-NAME,tvnserver.exe,DIRECT
-- PROCESS-NAME,tvnserver,DIRECT
-- PROCESS-NAME,AnyDesk.exe,DIRECT
-- PROCESS-NAME,AnyDesk,DIRECT
-- PROCESS-NAME,ToDesk.exe,DIRECT
-- PROCESS-NAME,ToDesk_Service.exe,DIRECT
-- PROCESS-NAME,ToDesk,DIRECT
-# v5.4.11 FIX#RD-PROC: RustDesk public relay/API 走会议协作；私网地址已由 private 规则直连
-- "PROCESS-NAME,RustDesk.exe,\U0001F9D1‍\U0001F4BC 会议协作"
-- "PROCESS-NAME,rustdesk.exe,\U0001F9D1‍\U0001F4BC 会议协作"
-- "PROCESS-NAME,RustDesk,\U0001F9D1‍\U0001F4BC 会议协作"
-- "PROCESS-NAME,rustdesk,\U0001F9D1‍\U0001F4BC 会议协作"
-- PROCESS-NAME,TeamViewer.exe,DIRECT
-- PROCESS-NAME,TeamViewer_Service.exe,DIRECT
-- PROCESS-NAME,TeamViewer,DIRECT
-- PROCESS-NAME,ZeroTier One.exe,DIRECT
-- PROCESS-NAME,zerotier-one.exe,DIRECT
-- PROCESS-NAME,zerotier-one_x64.exe,DIRECT
-- PROCESS-NAME,zerotier-one,DIRECT
-- PROCESS-NAME,Tailscale.exe,DIRECT
-- PROCESS-NAME,tailscale.exe,DIRECT
-- PROCESS-NAME,tailscaled.exe,DIRECT
-- PROCESS-NAME,Tailscale,DIRECT
-- PROCESS-NAME,tailscale,DIRECT
-- PROCESS-NAME,tailscaled,DIRECT
-- PROCESS-NAME,phddns.exe,DIRECT
-- PROCESS-NAME,phddns,DIRECT
-- PROCESS-NAME,ngrok.exe,DIRECT
-- PROCESS-NAME,ngrok,DIRECT
-- PROCESS-NAME,frpc.exe,DIRECT
-- PROCESS-NAME,frpc,DIRECT
-- PROCESS-NAME,frps.exe,DIRECT
-- PROCESS-NAME,frps,DIRECT
-- PROCESS-NAME,natapp.exe,DIRECT
-- PROCESS-NAME,natapp,DIRECT
-- PROCESS-NAME,cloudflared.exe,DIRECT
-- PROCESS-NAME,cloudflared,DIRECT
-- PROCESS-NAME,xmqtunnel.exe,DIRECT
-- PROCESS-NAME,xmqtunnel,DIRECT
-- PROCESS-NAME,Navicat.exe,DIRECT
-- PROCESS-NAME,navicat.exe,DIRECT
-- PROCESS-NAME,Navicat Premium.exe,DIRECT
-- PROCESS-NAME,Navicat,DIRECT
-- PROCESS-NAME,Navicat Premium,DIRECT
-# 游戏加速器 — 这些工具自身是网络加速隧道，走代理会导致双重代理/连接失败
-- PROCESS-NAME,LeigodAcc.exe,DIRECT
-- PROCESS-NAME,LeigodAccel.exe,DIRECT
-- PROCESS-NAME,leigodaccel.exe,DIRECT
-- PROCESS-NAME,NeteaseUU.exe,DIRECT
-- PROCESS-NAME,NeteaseUUBrowser.exe,DIRECT
-- PROCESS-NAME,NNer.exe,DIRECT
-- PROCESS-NAME,NNerClient.exe,DIRECT
-- PROCESS-NAME,UU.exe,DIRECT
-- PROCESS-NAME,UUGameBooster.exe,DIRECT
-- PROCESS-NAME,UURepair.exe,DIRECT
-- PROCESS-NAME,UUService.exe,DIRECT
-- PROCESS-NAME,xhjsq.exe,DIRECT
-- PROCESS-NAME,XiaoHeiAccelerator.exe,DIRECT
-- PROCESS-NAME,xunyou.exe,DIRECT
-- PROCESS-NAME,XunYouAcc.exe,DIRECT
-- PROCESS-NAME,XunYouUpdate.exe,DIRECT
-- DOMAIN-SUFFIX,chiphell.com,DIRECT
-- DOMAIN-SUFFIX,iwipwedabay.com,DIRECT
-- DOMAIN-SUFFIX,cdn.weixin.qq.com,DIRECT
-- "DOMAIN-SUFFIX,binance.vision,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,binance.info,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,binance.cloud,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,binance.me,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,binance.org,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,binancefuture.com,\U0001F4B0 加密货币"
-- "DOMAIN,dns.google,\U0001F6AB 受限网站"
-- "DOMAIN,dns.google.com,\U0001F6AB 受限网站"
-- "DOMAIN-SUFFIX,youtube.com,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,youtu.be,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,googlevideo.com,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,ytimg.com,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,ggpht.com,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,youtube-nocookie.com,\U0001F4F9 YouTube"
-- "DOMAIN-SUFFIX,youtubekids.com,\U0001F4F9 YouTube"
-- "RULE-SET,openai,\U0001F916 AI 服务"
-- "RULE-SET,claude,\U0001F916 AI 服务"
-- "RULE-SET,gemini,\U0001F916 AI 服务"
-# v5.4.10 FIX#RD-COPILOT: RustDesk relay 可落到 Copilot.list 的 AS20473，需前置防吞
-- "DOMAIN-SUFFIX,rustdesk.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,copilot,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,perplexity.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,mistral.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,x.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,grok.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,deepseek.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,huggingface.co,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,replicate.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,together.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,cohere.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,cohere.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,midjourney.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,stability.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,anthropic.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,cursor.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,cursor.sh,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,v0.dev,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,vercel.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,notebooklm.google,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,poe.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,character.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,inflection.ai,\U0001F6AB 受限网站"
-- "DOMAIN-SUFFIX,pi.ai,\U0001F6AB 受限网站"
-- "DOMAIN-SUFFIX,suno.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,suno.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,runway.ml,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,runwayml.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,openrouter.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,fireworks.ai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,modal.com,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,modal.run,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,runpod.io,\U0001F916 AI 服务"
-- "RULE-SET,civitai,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,gmail.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,googlemail.com,\U0001F310 国外网站"
-- "DOMAIN,mail.google.com,\U0001F310 国外网站"
-- "DOMAIN,inbox.google.com,\U0001F310 国外网站"
-- "RULE-SET,googlevoice,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,meet.google.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN,meet.googleapis.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,dl.google.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,play.googleapis.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,android.clients.google.com,\U0001F4E5 下载更新"
-- "RULE-SET,googlefcm,\U0001F4E5 下载更新"
-- "RULE-SET,google,\U0001F527 工具与服务"
-- "RULE-SET,google-ip,\U0001F527 工具与服务,no-resolve"
-- "RULE-SET,szkane-ai,\U0001F916 AI 服务"
-- "RULE-SET,szkane-ciciai,\U0001F916 AI 服务"
-- "RULE-SET,acc-appleai,\U0001F916 AI 服务"
-- "RULE-SET,acc-grok,\U0001F916 AI 服务"
-- "RULE-SET,acc-gemini,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,do.dsp.mp.microsoft.com,\U0001F4E5 下载更新"
-- "RULE-SET,acc-copilot,\U0001F916 AI 服务"
-- "DOMAIN-SUFFIX,tradingview.com,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,tvcdn.com,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,coinglass.com,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,hyperliquid.xyz,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,hyperliquid-testnet.xyz,\U0001F4B0 加密货币"
-- "RULE-SET,cryptocurrency,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,eth.limo,\U0001F4B0 加密货币"
-- "DOMAIN-SUFFIX,glitternode.ru,\U0001F4B0 加密货币"
-- "RULE-SET,binance,\U0001F4B0 加密货币"
-- "RULE-SET,szkane-web3,\U0001F4B0 加密货币"
-- "RULE-SET,paypal,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,stripe.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,stripe.network,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,stripecdn.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,stripe.dev,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,wise.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,transferwise.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,revolut.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,revolut.me,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,braintreegateway.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,braintree-api.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,venmo.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,cash.app,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,squareup.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,square.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,adyen.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,checkout.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,klarna.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,afterpay.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,plaid.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,midtrans.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,gopay.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,ovo.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,dana.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,shopeepay.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,xendit.co,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,doku.com,\U0001F3E6 金融支付"
-- "RULE-SET,stripe,\U0001F3E6 金融支付"
-- "RULE-SET,visa,\U0001F3E6 金融支付"
-- "RULE-SET,tigerfintech,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-us,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-uk,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-hk,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-sg,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-jp,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-au,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-ca,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-de,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-nl,\U0001F3E6 金融支付"
-- "RULE-SET,acc-bank-fr,\U0001F3E6 金融支付"
-- "RULE-SET,acc-vf-paypal,\U0001F3E6 金融支付"
-- "RULE-SET,acc-vf-wise,\U0001F3E6 金融支付"
-- "RULE-SET,acc-vf-monzo,\U0001F3E6 金融支付"
-- "RULE-SET,acc-vf-revolut,\U0001F3E6 金融支付"
-- DOMAIN,login.live.com,Ⓜ️ 微软服务
-- DOMAIN,g.live.com,Ⓜ️ 微软服务
-- DOMAIN-SUFFIX,officeapps.live.com,Ⓜ️ 微软服务
-- "DOMAIN-SUFFIX,outlook.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,outlook.live.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,hotmail.com,\U0001F310 国外网站"
-- "DOMAIN,mail.live.com,\U0001F310 国外网站"
-- "DOMAIN,outlook.office365.com,\U0001F310 国外网站"
-- "DOMAIN,outlook.office.com,\U0001F310 国外网站"
-- "DOMAIN,mail.yahoo.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,ymail.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,proton.me,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,pm.me,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tutanota.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tuta.com,\U0001F310 国外网站"
-- "DOMAIN,mail.zoho.com,\U0001F310 国外网站"
-- "DOMAIN,mail.zoho.eu,\U0001F310 国外网站"
-- "DOMAIN,mail.zoho.in,\U0001F310 国外网站"
-- "DOMAIN,mail.zoho.com.au,\U0001F310 国外网站"
-- "DOMAIN,mail.zoho.jp,\U0001F310 国外网站"
-- "DOMAIN,mail.me.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,fastmail.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,fastmail.fm,\U0001F310 国外网站"
-- "RULE-SET,mail,\U0001F310 国外网站"
-- "RULE-SET,mailru,\U0001F310 国外网站"
-- "RULE-SET,protonmail,\U0001F310 国外网站"
-- "RULE-SET,spark,\U0001F310 国外网站"
-- DOMAIN-SUFFIX,mail.qq.com,DIRECT
-- DOMAIN-SUFFIX,mail.163.com,DIRECT
-- DOMAIN-SUFFIX,mail.126.com,DIRECT
-- DOMAIN-SUFFIX,mail.sina.com.cn,DIRECT
-- DOMAIN-SUFFIX,mail.aliyun.com,DIRECT
-- "RULE-SET,telegram,\U0001F4AC 即时通讯"
-- "RULE-SET,telegram-ip,\U0001F4AC 即时通讯,no-resolve"
-- "RULE-SET,discord,\U0001F4AC 即时通讯"
-- "RULE-SET,whatsapp,\U0001F4AC 即时通讯"
-- "RULE-SET,line,\U0001F4AC 即时通讯"
-- "RULE-SET,kakaotalk,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,skype.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,skypeecs.net,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,skypeforbusiness.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,sfbassets.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,lync.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,signal.org,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,whispersystems.org,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,signal.art,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,viber.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,viber.io,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,element.io,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,matrix.org,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,zalo.me,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,zalopay.vn,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,wire.com,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,threema.ch,\U0001F4AC 即时通讯"
-- "RULE-SET,telegramnl,\U0001F4AC 即时通讯,no-resolve"
-- "RULE-SET,telegramsg,\U0001F4AC 即时通讯,no-resolve"
-- "RULE-SET,telegramus,\U0001F4AC 即时通讯,no-resolve"
-- "RULE-SET,zalo,\U0001F4AC 即时通讯"
-- "RULE-SET,italkbb,\U0001F4AC 即时通讯"
-- "RULE-SET,acc-signal,\U0001F4AC 即时通讯"
-- "DOMAIN-SUFFIX,icq.com,\U0001F4AC 即时通讯"
-- "RULE-SET,twitter,\U0001F4F1 社交媒体"
-- "RULE-SET,twitter-ip,\U0001F4F1 社交媒体,no-resolve"
-- "RULE-SET,reddit,\U0001F4F1 社交媒体"
-- "RULE-SET,facebook,\U0001F4F1 社交媒体"
-- "RULE-SET,facebook-ip,\U0001F4F1 社交媒体,no-resolve"
-- "RULE-SET,instagram,\U0001F4F1 社交媒体"
-- "RULE-SET,snapchat,\U0001F4F1 社交媒体"
-- "RULE-SET,pinterest,\U0001F4F1 社交媒体"
-- "RULE-SET,linkedin,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,mastodon.social,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,joinmastodon.org,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,threads.net,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,bsky.app,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,bsky.social,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,quora.com,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,medium.com,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,flickr.com,\U0001F4F1 社交媒体"
-- "DOMAIN-SUFFIX,lemon8-app.com,\U0001F4F1 社交媒体"
-- "RULE-SET,tumblr,\U0001F4F1 社交媒体"
-- "RULE-SET,clubhouse,\U0001F4F1 社交媒体"
-- "RULE-SET,clubhouseip,\U0001F4F1 社交媒体,no-resolve"
-- "RULE-SET,pixiv,\U0001F4F1 社交媒体"
-- "RULE-SET,truthsocial,\U0001F4F1 社交媒体"
-- "RULE-SET,vk,\U0001F4F1 社交媒体"
-- "RULE-SET,blued,\U0001F3E0 国内网站"
-- "RULE-SET,disqus,\U0001F4F1 社交媒体"
-- "RULE-SET,imgur,\U0001F4F1 社交媒体"
-- "RULE-SET,pixnet,\U0001F4F1 社交媒体"
-- "RULE-SET,zoom,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,slack,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,teams,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,webex.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,wbx2.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,ciscospark.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,notion.so,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,notion.site,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,figma.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,linear.app,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,atlassian.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,jira.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,trello.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,bitbucket.org,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,asana.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,monday.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,clickup.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,basecamp.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,airtable.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,miro.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,canva.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,coda.io,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,loom.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,larksuite.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,larkoffice.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,gotomeeting.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,logmein.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "DOMAIN-SUFFIX,goto.com,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,atlassian,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,notion,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,teamviewer,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,zoho,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,salesforce,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,zendesk,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,intercom,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,remotedesktop,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,acc-rustdesk,\U0001F9D1‍\U0001F4BC 会议协作"
-- "RULE-SET,acc-parsec,\U0001F9D1‍\U0001F4BC 会议协作"
-- DOMAIN-SUFFIX,feishu.cn,DIRECT
-- DOMAIN-SUFFIX,dingtalk.com,DIRECT
-- DOMAIN-SUFFIX,welink.huaweicloud.com,DIRECT
+- "DST-PORT,7680,REJECT"
+- "RULE-SET,scki-fused-008-direct-domain,DIRECT"
+- "RULE-SET,scki-fused-008-direct-ipcidr-no-resolve,DIRECT,no-resolve"
+- "RULE-SET,scki-fused-008-direct-residual,DIRECT"
+- "RULE-SET,scki-fused-009-work-residual,🧑‍💼 会议协作"
+- "DST-PORT,26880,DIRECT"
+- "DST-PORT,6540,DIRECT"
+- "DST-PORT,33068,DIRECT"
+- "DST-PORT,123,DIRECT"
+- "DST-PORT,3478,DIRECT"
+- "DST-PORT,3479,DIRECT"
+- "DST-PORT,5349,DIRECT"
+- "DST-PORT,19302,DIRECT"
+- "DST-PORT,19305,DIRECT"
+- "DST-PORT,19307,DIRECT"
+- "RULE-SET,scki-fused-010-crypto-domain,💰 加密货币"
+- "RULE-SET,scki-fused-011-gfw-domain,🚫 受限网站"
+- "RULE-SET,scki-fused-012-youtube-domain,📹 YouTube"
+- "RULE-SET,scki-fused-013-cn-site-domain,🏠 国内网站"
+- "RULE-SET,scki-fused-014-ai-domain,🤖 AI 服务"
+- "RULE-SET,scki-fused-015-google-domain,🔍 Google 服务"
+- "RULE-SET,scki-fused-015-google-residual,🔍 Google 服务"
+- "RULE-SET,scki-fused-016-work-domain,🧑‍💼 会议协作"
+- "RULE-SET,scki-fused-017-ai-domain,🤖 AI 服务"
+- "RULE-SET,scki-fused-017-ai-ipcidr,🤖 AI 服务"
+- "RULE-SET,scki-fused-017-ai-residual,🤖 AI 服务"
+- "RULE-SET,scki-fused-018-intl-site-domain,🌐 国外网站"
+- "RULE-SET,scki-fused-019-im-domain,💬 即时通讯"
+- "RULE-SET,scki-fused-020-work-domain,🧑‍💼 会议协作"
+- "RULE-SET,scki-fused-021-download-domain,📥 下载更新"
+- "RULE-SET,scki-fused-021-download-ipcidr,📥 下载更新"
+- "RULE-SET,scki-fused-022-google-domain,🔍 Google 服务"
+- "RULE-SET,scki-fused-022-google-ipcidr-no-resolve,🔍 Google 服务,no-resolve"
+- "AND,((PROCESS-NAME,Code Helper),(DOMAIN,api.github.com)),🤖 AI 服务"
+- "AND,((PROCESS-NAME,Code Helper (Plugin)),(DOMAIN,api.github.com)),🤖 AI 服务"
+- "RULE-SET,scki-fused-023-tools-domain,🔧 工具与服务"
+- "RULE-SET,scki-fused-024-ai-domain,🤖 AI 服务"
+- "RULE-SET,scki-fused-024-ai-ipcidr-no-resolve,🤖 AI 服务,no-resolve"
+- "RULE-SET,scki-fused-024-ai-residual,🤖 AI 服务"
+- "RULE-SET,scki-fused-025-google-domain,🔍 Google 服务"
+- "RULE-SET,scki-fused-026-ai-domain,🤖 AI 服务"
+- "RULE-SET,scki-fused-026-ai-ipcidr-no-resolve,🤖 AI 服务,no-resolve"
+- "RULE-SET,scki-fused-026-ai-residual,🤖 AI 服务"
+- "RULE-SET,scki-fused-027-crypto-domain,💰 加密货币"
+- "RULE-SET,scki-fused-027-crypto-residual,💰 加密货币"
+- "RULE-SET,scki-fused-028-payments-domain,🏦 金融支付"
+- "RULE-SET,scki-fused-028-payments-residual,🏦 金融支付"
+- "RULE-SET,scki-fused-029-microsoft-domain,Ⓜ️ 微软服务"
+- "RULE-SET,scki-fused-030-intl-site-domain,🌐 国外网站"
+- "RULE-SET,scki-fused-031-direct-domain,DIRECT"
+- "RULE-SET,scki-fused-032-im-domain,💬 即时通讯"
+- "RULE-SET,scki-fused-032-im-ipcidr,💬 即时通讯"
+- "RULE-SET,scki-fused-032-im-ipcidr-no-resolve,💬 即时通讯,no-resolve"
+- "RULE-SET,scki-fused-032-im-residual,💬 即时通讯"
+- "RULE-SET,scki-fused-033-social-domain,📱 社交媒体"
+- "RULE-SET,scki-fused-033-social-ipcidr,📱 社交媒体"
+- "RULE-SET,scki-fused-033-social-ipcidr-no-resolve,📱 社交媒体,no-resolve"
+- "RULE-SET,scki-fused-033-social-residual,📱 社交媒体"
+- "RULE-SET,scki-fused-034-cn-site-domain,🏠 国内网站"
+- "RULE-SET,scki-fused-035-social-domain,📱 社交媒体"
+- "RULE-SET,scki-fused-036-work-domain,🧑‍💼 会议协作"
+- "RULE-SET,scki-fused-036-work-ipcidr,🧑‍💼 会议协作"
+- "RULE-SET,scki-fused-036-work-residual,🧑‍💼 会议协作"
+- "RULE-SET,scki-fused-037-direct-domain,DIRECT"
+- "RULE-SET,scki-fused-038-cnmedia-domain,📺 国内流媒体"
+- "RULE-SET,scki-fused-039-tiktok-domain,🎵 TikTok"
+- "RULE-SET,scki-fused-040-youtube-domain,📹 YouTube"
+- "RULE-SET,scki-fused-041-netflix-domain,🎥 Netflix"
+- "RULE-SET,scki-fused-041-netflix-ipcidr-no-resolve,🎥 Netflix,no-resolve"
+- "RULE-SET,scki-fused-042-disney-domain,🎬 Disney+"
+- "RULE-SET,scki-fused-042-disney-residual,🎬 Disney+"
+- "RULE-SET,scki-fused-043-hbo-max-domain,📡 HBO/Max"
+- "RULE-SET,scki-fused-043-hbo-max-residual,📡 HBO/Max"
+- "RULE-SET,scki-fused-044-hulu-domain,📺 Hulu"
+- "RULE-SET,scki-fused-044-hulu-residual,📺 Hulu"
+- "RULE-SET,scki-fused-045-prime-video-domain,🎬 Prime Video"
+- "RULE-SET,scki-fused-045-prime-video-ipcidr,🎬 Prime Video"
+- "RULE-SET,scki-fused-045-prime-video-residual,🎬 Prime Video"
+- "RULE-SET,scki-fused-046-music-domain,🎵 音乐流媒体"
+- "RULE-SET,scki-fused-046-music-ipcidr,🎵 音乐流媒体"
+- "RULE-SET,scki-fused-047-stream-hk-domain,🇭🇰 香港流媒体"
+- "RULE-SET,scki-fused-047-stream-hk-ipcidr-no-resolve,🇭🇰 香港流媒体,no-resolve"
+- "RULE-SET,scki-fused-047-stream-hk-residual,🇭🇰 香港流媒体"
+- "RULE-SET,scki-fused-048-stream-tw-domain,🇹🇼 台湾流媒体"
+- "RULE-SET,scki-fused-048-stream-tw-residual,🇹🇼 台湾流媒体"
+- "RULE-SET,scki-fused-049-stream-jpkr-domain,🇯🇵 日韩流媒体"
+- "RULE-SET,scki-fused-049-stream-jpkr-ipcidr,🇯🇵 日韩流媒体"
+- "RULE-SET,scki-fused-049-stream-jpkr-residual,🇯🇵 日韩流媒体"
+- "RULE-SET,scki-fused-050-stream-eu-domain,🇪🇺 欧洲流媒体"
+- "RULE-SET,scki-fused-050-stream-eu-residual,🇪🇺 欧洲流媒体"
+- "RULE-SET,scki-fused-051-stream-other-domain,🌐 其他国外流媒体"
+- "RULE-SET,scki-fused-051-stream-other-ipcidr,🌐 其他国外流媒体"
+- "RULE-SET,scki-fused-051-stream-other-residual,🌐 其他国外流媒体"
+- "RULE-SET,scki-fused-052-tools-domain,🔧 工具与服务"
+- "RULE-SET,scki-fused-053-google-domain,🔍 Google 服务"
+- "RULE-SET,scki-fused-054-tools-domain,🔧 工具与服务"
+- "RULE-SET,scki-fused-054-tools-ipcidr,🔧 工具与服务"
+- "RULE-SET,scki-fused-054-tools-residual,🔧 工具与服务"
+- "RULE-SET,scki-fused-055-microsoft-domain,Ⓜ️ 微软服务"
+- "RULE-SET,scki-fused-055-microsoft-residual,Ⓜ️ 微软服务"
+- "RULE-SET,scki-fused-056-apple-domain,🍎 苹果服务"
+- "RULE-SET,scki-fused-056-apple-ipcidr,🍎 苹果服务"
+- "RULE-SET,scki-fused-056-apple-residual,🍎 苹果服务"
+- "RULE-SET,scki-fused-057-download-domain,📥 下载更新"
+- "RULE-SET,scki-fused-057-download-ipcidr,📥 下载更新"
+- "RULE-SET,scki-fused-057-download-residual,📥 下载更新"
+- "RULE-SET,scki-fused-058-tracker-domain,🛰️ BT/PT Tracker"
+- "RULE-SET,scki-fused-058-tracker-ipcidr,🛰️ BT/PT Tracker"
+- "RULE-SET,scki-fused-058-tracker-residual,🛰️ BT/PT Tracker"
+- "RULE-SET,scki-fused-059-gfw-domain,🚫 受限网站"
+- "RULE-SET,scki-fused-059-gfw-ipcidr-no-resolve,🚫 受限网站,no-resolve"
+- "RULE-SET,scki-fused-059-gfw-residual,🚫 受限网站"
+- "RULE-SET,scki-fused-060-game-cn-domain,🕹️ 国内游戏"
+- "RULE-SET,scki-fused-061-game-intl-domain,🎮 国外游戏"
+- "RULE-SET,scki-fused-061-game-intl-ipcidr,🎮 国外游戏"
+- "RULE-SET,scki-fused-061-game-intl-residual,🎮 国外游戏"
+- "RULE-SET,scki-fused-062-intl-site-domain,🌐 国外网站"
+- "RULE-SET,scki-fused-062-intl-site-ipcidr,🌐 国外网站"
+- "RULE-SET,scki-fused-062-intl-site-residual,🌐 国外网站"
+- "RULE-SET,scki-fused-063-payments-domain,🏦 金融支付"
+- "RULE-SET,scki-fused-064-cnmedia-domain,📺 国内流媒体"
+- "RULE-SET,scki-fused-064-cnmedia-ipcidr,📺 国内流媒体"
+- "RULE-SET,scki-fused-064-cnmedia-residual,📺 国内流媒体"
+- "RULE-SET,scki-fused-065-cn-site-domain,🏠 国内网站"
+- "RULE-SET,scki-fused-065-cn-site-ipcidr-no-resolve,🏠 国内网站,no-resolve"
+- "RULE-SET,scki-fused-066-direct-domain,DIRECT"
+- "RULE-SET,scki-fused-067-cn-site-domain,🏠 国内网站"
+- "RULE-SET,scki-fused-067-cn-site-residual,🏠 国内网站"
+- "RULE-SET,scki-fused-068-intl-site-domain,🌐 国外网站"
+- "RULE-SET,scki-fused-068-intl-site-ipcidr,🌐 国外网站"
+- "RULE-SET,scki-fused-068-intl-site-ipcidr-no-resolve,🌐 国外网站,no-resolve"
+- "RULE-SET,scki-fused-068-intl-site-residual,🌐 国外网站"
+- "RULE-SET,scki-fused-069-im-residual,💬 即时通讯"
+- "RULE-SET,scki-fused-070-netflix-residual,🎥 Netflix"
+- "RULE-SET,scki-fused-071-social-residual,📱 社交媒体"
+- "RULE-SET,scki-fused-072-google-residual,🔍 Google 服务"
+- "MATCH,🐟 漏网之鱼"
 
-  # ============ 🎵 TikTok ============
-- "RULE-SET,tiktok,\U0001F3B5 TikTok"
-
-  # ============ 平台流媒体 ============
-- "RULE-SET,youtube,\U0001F4F9 YouTube"
-- "RULE-SET,netflix,\U0001F3A5 Netflix"
-- "RULE-SET,netflix-ip,\U0001F3A5 Netflix,no-resolve"
-- "RULE-SET,szkane-netflixip,\U0001F3A5 Netflix,no-resolve"
-- "RULE-SET,disney,\U0001F3AC Disney+"
-- "RULE-SET,hbo,\U0001F4E1 HBO/Max"
-- "DOMAIN-SUFFIX,max.com,\U0001F4E1 HBO/Max"
-- "RULE-SET,hulu,\U0001F4FA Hulu"
-- "DOMAIN-SUFFIX,hulu.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,primevideo,\U0001F3AC Prime Video"
-- "RULE-SET,amazon,\U0001F3AC Prime Video"
-- "RULE-SET,spotify,\U0001F3B5 音乐流媒体"
-- "RULE-SET,soundcloud,\U0001F3B5 音乐流媒体"
-- "RULE-SET,pandora,\U0001F3B5 音乐流媒体"
-- "RULE-SET,pandoratv,\U0001F3B5 音乐流媒体"
-- "RULE-SET,tidal,\U0001F3B5 音乐流媒体"
-- "RULE-SET,deezer,\U0001F3B5 音乐流媒体"
-- "RULE-SET,overcast,\U0001F3B5 音乐流媒体"
-- "RULE-SET,lastfm,\U0001F3B5 音乐流媒体"
-
-  # ============ 🇭🇰 香港流媒体 ============
-- "RULE-SET,szkane-bilihmt,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,mytvsuper.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,mytv.com.hk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,viu.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,viu.tv,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,hktv.com.hk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,hktvmall.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,nowtv.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,nowe.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,rthk.hk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,icable.com,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,cabletv.com.hk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "DOMAIN-SUFFIX,hmvod.com.hk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,mytvsuper,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,tvb,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,encoretvb,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,nowe,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,rthk,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,cabletv,\U0001F1ED\U0001F1F0 香港流媒体"
-- "RULE-SET,moov,\U0001F1ED\U0001F1F0 香港流媒体"
-  # ============ 🇹🇼 台湾流媒体 ============
-- "RULE-SET,bahamut,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,kktv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,litv.tv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,video.friday.tw,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,friday.tw,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,linetv.tw,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,elta.tv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,mod.cht.com.tw,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,hamivideo.hinet.net,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,ofiii.com,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,pts.org.tw,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "DOMAIN-SUFFIX,4gtv.tv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,litv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,friday,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,hamivideo,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,linetv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,vidoltv,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,taiwangood,\U0001F1F9\U0001F1FC 台湾流媒体"
-- "RULE-SET,cht,\U0001F1F9\U0001F1FC 台湾流媒体"
-  # ============ 🇯🇵 日韩流媒体 ============
-- "RULE-SET,abema,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,dazn,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,tver.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,unext.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,video.unext.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,nhk.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,nhk.or.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,dmm.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,dmm.co.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,dtv.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,paravi.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,videomarket.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,fod.fujitv.co.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,hulu.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,happyon.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,gyao.yahoo.co.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,music.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,nicovideo.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,nicovideo.me,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,dmc.nico,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,radiko.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,lemino.docomo.ne.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,wowow.co.jp,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,wavve.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,tving.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,watcha.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,coupangplay.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,sbs.co.kr,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,kbs.co.kr,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,mbc.co.kr,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,jtbc.co.kr,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,tvn.cjenm.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,afreecatv.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,tv.naver.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,now.naver.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,vod.naver.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,navertv.naver.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,kakaotv.daum.net,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "DOMAIN-SUFFIX,navercorp.com,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,dmm,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,tver,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,niconico,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,rakuten,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,japonx,\U0001F1EF\U0001F1F5 日韩流媒体"
-- "RULE-SET,nikkei,\U0001F1EF\U0001F1F5 日韩流媒体"
-
-  # ============ 欧洲流媒体 ============
-- "RULE-SET,bbc,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,itv.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,itvstatic.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,channel4.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,channel5.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,sky.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,nowtv.co.uk,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,britbox.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,canalplus.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,mycanal.fr,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,france.tv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,tf1.fr,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,molotov.tv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,arte.tv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,joyn.de,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,zdf.de,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,ard.de,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,ardmediathek.de,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,rtlplus.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,raiplay.it,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,rtve.es,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,videoland.com,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,ruutu.fi,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,tv2.dk,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,svtplay.se,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,nrk.no,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,ivi.ru,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,kinopoisk.ru,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,okko.tv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "DOMAIN-SUFFIX,more.tv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,itv,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,all4,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,my5,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,skygo,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,britboxuk,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,londonreal,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,qobuz,\U0001F1EA\U0001F1FA 欧洲流媒体"
-- "RULE-SET,szkane-uk,\U0001F1EA\U0001F1FA 欧洲流媒体"
-
-  # ============ 其他国外流媒体 ============
-- "RULE-SET,viu,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,wetv.vip,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,wetvinfo.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,iq.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,vidio.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,vidio.static6.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,rctiplus.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,visionplus.id,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,genflix.co.id,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,goplay.co.id,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,maxstream.tv,\U0001F310 其他国外流媒体"
-- "RULE-SET,biliintl,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,viki.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,viki.io,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,iflix.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,catchplay.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,mewatch.sg,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,trueid.net,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,dimsum.my,\U0001F310 其他国外流媒体"
-- "RULE-SET,asianmedia,\U0001F310 其他国外流媒体"
-- "RULE-SET,iqiyiintl,\U0001F310 其他国外流媒体"
-- "RULE-SET,joox,\U0001F310 其他国外流媒体"
-- "RULE-SET,mewatch,\U0001F310 其他国外流媒体"
-- "RULE-SET,viki,\U0001F310 其他国外流媒体"
-- "RULE-SET,wetv,\U0001F310 其他国外流媒体"
-- "RULE-SET,zee,\U0001F310 其他国外流媒体"
-- "RULE-SET,acc-kwai,\U0001F310 其他国外流媒体"
-- "RULE-SET,paramount,\U0001F310 其他国外流媒体"
-- "RULE-SET,peacock,\U0001F310 其他国外流媒体"
-- "RULE-SET,twitch,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,crunchyroll.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,vrv.co,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,pluto.tv,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,tubi.tv,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,fubo.tv,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,discoveryplus.com,\U0001F310 其他国外流媒体"
-- "DOMAIN-SUFFIX,appletv.com,\U0001F310 其他国外流媒体"
-- "RULE-SET,cbs,\U0001F310 其他国外流媒体"
-- "RULE-SET,nbc,\U0001F310 其他国外流媒体"
-- "RULE-SET,pbs,\U0001F310 其他国外流媒体"
-- "RULE-SET,attwatchtv,\U0001F310 其他国外流媒体"
-- "RULE-SET,fox,\U0001F310 其他国外流媒体"
-- "RULE-SET,fubotv,\U0001F310 其他国外流媒体"
-- "RULE-SET,sling,\U0001F310 其他国外流媒体"
-- "RULE-SET,vimeo,\U0001F310 其他国外流媒体"
-- "RULE-SET,dailymotion,\U0001F310 其他国外流媒体"
-- "RULE-SET,discoveryplus,\U0001F310 其他国外流媒体"
-- "RULE-SET,americasvoice,\U0001F310 其他国外流媒体"
-- "RULE-SET,cake,\U0001F310 其他国外流媒体"
-- "RULE-SET,dood,\U0001F310 其他国外流媒体"
-- "RULE-SET,emby,\U0001F310 其他国外流媒体"
-
-  # ============ 工具与服务 ============
-- "DOMAIN-SUFFIX,aws.amazon.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,elasticbeanstalk.com,\U0001F527 工具与服务"
-- "RULE-SET,bing,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,yahoo.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,yahoo.co.jp,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,duckduckgo.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,ddg.co,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,brave.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,yandex.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,yandex.ru,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,ecosia.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,startpage.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,you.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,search.naver.com,\U0001F527 工具与服务"
-- "RULE-SET,scholar,\U0001F527 工具与服务"
-- "RULE-SET,yandex,\U0001F527 工具与服务"
-- "RULE-SET,github,\U0001F527 工具与服务"
-- "RULE-SET,docker,\U0001F527 工具与服务"
-- "RULE-SET,gitlab,\U0001F527 工具与服务"
-- "GEOSITE,category-dev,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,npmjs.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,npmjs.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,yarnpkg.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,pypi.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,pythonhosted.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,crates.io,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,rubygems.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,packagist.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,maven.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,nuget.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,cocoapods.org,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,stackoverflow.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,stackexchange.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,sstatic.net,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,vercel.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,vercel.app,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,netlify.app,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,netlify.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,pages.dev,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,workers.dev,\U0001F527 工具与服务"
-- "DOMAIN,dash.cloudflare.com,\U0001F527 工具与服务"
-- "DOMAIN,api.cloudflare.com,\U0001F527 工具与服务"
-- "DOMAIN,developers.cloudflare.com,\U0001F527 工具与服务"
-- "DOMAIN,www.cloudflare.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,heroku.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,herokuapp.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,fly.io,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,railway.app,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,render.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,supabase.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,supabase.co,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,planetscale.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,neon.tech,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,digitalocean.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,vultr.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,linode.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,sentry.io,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,datadog.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,grafana.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,postman.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,jetbrains.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,hashicorp.com,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,terraform.io,\U0001F527 工具与服务"
-- "DOMAIN-SUFFIX,vagrantup.com,\U0001F527 工具与服务"
-- "RULE-SET,developer,\U0001F527 工具与服务"
-- "RULE-SET,python,\U0001F527 工具与服务"
-- "RULE-SET,gitbook,\U0001F527 工具与服务"
-- "RULE-SET,jfrog,\U0001F527 工具与服务"
-- "RULE-SET,sublimetext,\U0001F527 工具与服务"
-- "RULE-SET,wordpress,\U0001F527 工具与服务"
-- "RULE-SET,wix,\U0001F527 工具与服务"
-- "RULE-SET,cisco,\U0001F527 工具与服务"
-- "RULE-SET,ibm,\U0001F527 工具与服务"
-- "RULE-SET,oracle,\U0001F527 工具与服务"
-- "RULE-SET,unity,\U0001F527 工具与服务"
-- "RULE-SET,szkane-developer,\U0001F527 工具与服务"
-
-  # ============ 微软服务 ============
-- RULE-SET,onedrive,Ⓜ️ 微软服务
-- RULE-SET,microsoft,Ⓜ️ 微软服务
-- RULE-SET,microsoftedge,Ⓜ️ 微软服务
-- RULE-SET,acc-microsoftapps,Ⓜ️ 微软服务
-
-  # ============ 苹果服务 ============
-- "RULE-SET,applemusic,\U0001F34E 苹果服务"
-- "RULE-SET,icloud,\U0001F34E 苹果服务"
-- "RULE-SET,apple,\U0001F34E 苹果服务"
-- "RULE-SET,appstore,\U0001F34E 苹果服务"
-- "RULE-SET,appletv,\U0001F34E 苹果服务"
-- "RULE-SET,applenews,\U0001F34E 苹果服务"
-- "RULE-SET,appledev,\U0001F34E 苹果服务"
-- "RULE-SET,appleproxy,\U0001F34E 苹果服务"
-- "RULE-SET,siri,\U0001F34E 苹果服务"
-- "RULE-SET,testflight,\U0001F34E 苹果服务"
-- "RULE-SET,applefirmware,\U0001F34E 苹果服务"
-- "RULE-SET,findmy,\U0001F34E 苹果服务"
-- "RULE-SET,acc-applenews,\U0001F34E 苹果服务"
-- "RULE-SET,acc-apple,\U0001F34E 苹果服务"
-
-  # ============ 下载更新 ============
-- "RULE-SET,systemota,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,windowsupdate.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,update.microsoft.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,download.microsoft.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,delivery.mp.microsoft.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,dl.delivery.mp.microsoft.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,officecdn.microsoft.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,officecdn.microsoft.com.edgesuite.net,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,download.mozilla.org,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,archive.mozilla.org,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,releases.ubuntu.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,archive.ubuntu.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,security.ubuntu.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,mirrors.kernel.org,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,dl.fedoraproject.org,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,repo.anaconda.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,conda.anaconda.org,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,repo.continuum.io,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,sourceforge.net,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,fosshub.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,filehippo.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,softonic.com,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,gcr.io,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,ghcr.io,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,quay.io,\U0001F4E5 下载更新"
-- "DOMAIN-SUFFIX,registry.k8s.io,\U0001F4E5 下载更新"
-- "RULE-SET,download,\U0001F4E5 下载更新"
-- "RULE-SET,ubuntu,\U0001F4E5 下载更新"
-- "RULE-SET,mozilla,\U0001F4E5 下载更新"
-- "RULE-SET,apkpure,\U0001F4E5 下载更新"
-- "RULE-SET,android,\U0001F4E5 下载更新"
-- "RULE-SET,intel,\U0001F4E5 下载更新"
-- "RULE-SET,nvidia,\U0001F4E5 下载更新"
-- "RULE-SET,dell,\U0001F4E5 下载更新"
-- "RULE-SET,hp,\U0001F4E5 下载更新"
-- "RULE-SET,canon,\U0001F4E5 下载更新"
-- "RULE-SET,lg,\U0001F4E5 下载更新"
-- "RULE-SET,acc-macappupgrade,\U0001F4E5 下载更新"
-
-  # ============ BT/PT Tracker ============
-- "GEOSITE,tracker,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,tracker.opentrackr.org,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,open.stealth.si,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,tracker.torrent.eu.org,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,exodus.desync.com,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,tracker.openbittorrent.com,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,tracker.publicbt.com,\U0001F6F0️ BT/PT Tracker"
-- "DOMAIN-SUFFIX,tracker.dler.org,\U0001F6F0️ BT/PT Tracker"
-- "RULE-SET,privatetracker,\U0001F6F0️ BT/PT Tracker"
-- "RULE-SET,acc-emuleserver,\U0001F6F0️ BT/PT Tracker"
-
-  # ============ 受限网站 ============
-- "DOMAIN-SUFFIX,jsdelivr.net,\U0001F6AB 受限网站"
-- "DOMAIN-SUFFIX,cloudflare-dns.com,\U0001F6AB 受限网站"
-- "GEOSITE,gfw,\U0001F6AB 受限网站"
-- "RULE-SET,loyalsoldier-gfw,\U0001F6AB 受限网站"
-- "RULE-SET,loyalsoldier-greatfire,\U0001F6AB 受限网站"
-- "RULE-SET,szkane-proxygfw,\U0001F6AB 受限网站"
-
-  # ============ 国外游戏 ============
-- "RULE-SET,steam,\U0001F3AE 国外游戏"
-- "RULE-SET,epic,\U0001F3AE 国外游戏"
-- "RULE-SET,playstation,\U0001F3AE 国外游戏"
-- "RULE-SET,nintendo,\U0001F3AE 国外游戏"
-- "RULE-SET,xbox,\U0001F3AE 国外游戏"
-- "RULE-SET,ea,\U0001F3AE 国外游戏"
-- "RULE-SET,blizzard,\U0001F3AE 国外游戏"
-- "GEOSITE,category-games,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,ubisoft.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,ubi.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,riotgames.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,leagueoflegends.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,valorant.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,rockstargames.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,gog.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,gogalaxy.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,bethesda.net,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,supercell.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,garena.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,hoyoverse.com,\U0001F3AE 国外游戏"
-- "DOMAIN-SUFFIX,hoyolab.com,\U0001F3AE 国外游戏"
-- "RULE-SET,rockstar,\U0001F3AE 国外游戏"
-- "RULE-SET,riot,\U0001F3AE 国外游戏"
-- "RULE-SET,gog,\U0001F3AE 国外游戏"
-- "RULE-SET,supercell,\U0001F3AE 国外游戏"
-- "RULE-SET,garena,\U0001F3AE 国外游戏"
-- "RULE-SET,hoyoverse,\U0001F3AE 国外游戏"
-- "RULE-SET,ubi,\U0001F3AE 国外游戏"
-- "RULE-SET,wildrift,\U0001F3AE 国外游戏"
-- "RULE-SET,sony,\U0001F3AE 国外游戏"
-
-  # ============ 国外网站 ============
-- DOMAIN-SUFFIX,amazonaws.com,🌐 国外网站
-- DOMAIN-SUFFIX,awsstatic.com,🌐 国外网站
-- RULE-SET,cloudflare-ip,🌐 国外网站,no-resolve
-- RULE-SET,cloudfront-ip,🌐 国外网站,no-resolve
-- RULE-SET,fastly-ip,🌐 国外网站,no-resolve
-- DOMAIN-SUFFIX,akamai.net,🌐 国外网站
-- DOMAIN-SUFFIX,akamaized.net,🌐 国外网站
-- DOMAIN-SUFFIX,akamaihd.net,🌐 国外网站
-- DOMAIN-SUFFIX,akamaiedge.net,🌐 国外网站
-- DOMAIN-SUFFIX,akamaitechnologies.com,🌐 国外网站
-- DOMAIN-SUFFIX,edgekey.net,🌐 国外网站
-- DOMAIN-SUFFIX,edgesuite.net,🌐 国外网站
-- DOMAIN-SUFFIX,cloudfront.net,🌐 国外网站
-- DOMAIN-SUFFIX,fastly.net,🌐 国外网站
-- DOMAIN-SUFFIX,fastlylb.net,🌐 国外网站
-- DOMAIN-SUFFIX,kxcdn.com,🌐 国外网站
-- DOMAIN-SUFFIX,stackpathdns.com,🌐 国外网站
-- DOMAIN-SUFFIX,stackpathcdn.com,🌐 国外网站
-- DOMAIN-SUFFIX,b-cdn.net,🌐 国外网站
-- DOMAIN-SUFFIX,bunny.net,🌐 国外网站
-- DOMAIN-SUFFIX,bunnycdn.com,🌐 国外网站
-- DOMAIN-SUFFIX,cdn77.org,🌐 国外网站
-- DOMAIN-SUFFIX,azureedge.net,🌐 国外网站
-- DOMAIN-SUFFIX,azurefd.net,🌐 国外网站
-- DOMAIN-SUFFIX,msecnd.net,🌐 国外网站
-- DOMAIN-SUFFIX,unpkg.com,🌐 国外网站
-- DOMAIN-SUFFIX,r2.dev,🌐 国外网站
-- DOMAIN-SUFFIX,ziffstatic.com,🌐 国外网站
-- DOMAIN-SUFFIX,ucoz.ru,🌐 国外网站
-- DOMAIN-SUFFIX,ucoz.net,🌐 国外网站
-- RULE-SET,cloudflare,🌐 国外网站
-- RULE-SET,akamai,🌐 国外网站
-- RULE-SET,digicert,🌐 国外网站
-- RULE-SET,globalsign,🌐 国外网站
-- RULE-SET,sectigo,🌐 国外网站
-- RULE-SET,brightcove,🌐 国外网站
-- RULE-SET,jwplayer,🌐 国外网站
-- RULE-SET,acc-fastly,🌐 国外网站
-- DOMAIN-SUFFIX,letsencrypt.org,🌐 国外网站
-- DOMAIN-SUFFIX,lencr.org,🌐 国外网站
-- "DOMAIN-SUFFIX,tokopedia.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tokopedia.net,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,shopee.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,bukalapak.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,blibli.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,lazada.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,grab.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,gojek.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,gojek.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,traveloka.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tiket.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,telkomsel.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,telkom.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,indosatooredoo.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,im3.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,xl.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,smartfren.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tri.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,by.u.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,myrepublic.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,firstmedia.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,biznet.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,go.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,or.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,kompas.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,detik.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tempo.co,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,cnnindonesia.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,cnbcindonesia.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,liputan6.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,tribunnews.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,kumparan.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,idntimes.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,gofood.co.id,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,grabfood.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,66tutup.com,\U0001F310 国外网站"
-- "GEOIP,ID,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-homeip-us,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-homeip-jp,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-aqara-global,\U0001F310 国外网站"
-- "RULE-SET,cnn,\U0001F310 国外网站"
-- "RULE-SET,nytimes,\U0001F310 国外网站"
-- "RULE-SET,bloomberg,\U0001F310 国外网站"
-- "RULE-SET,ebay,\U0001F310 国外网站"
-- "RULE-SET,nike,\U0001F310 国外网站"
-- "RULE-SET,adobe,\U0001F310 国外网站"
-- "RULE-SET,samsung,\U0001F310 国外网站"
-- "RULE-SET,tesla,\U0001F310 国外网站"
-- "RULE-SET,dropbox,\U0001F310 国外网站"
-- "RULE-SET,mega,\U0001F310 国外网站"
-- "RULE-SET,wikipedia,\U0001F310 国外网站"
-- "RULE-SET,duolingo,\U0001F310 国外网站"
-- "RULE-SET,proxy,\U0001F310 国外网站"
-- "RULE-SET,acc-waybackmachine,\U0001F310 国外网站"
-- "RULE-SET,acc-pornhub,\U0001F310 国外网站"
-- "RULE-SET,szkane-khan,\U0001F310 国外网站"
-- "RULE-SET,szkane-edutools,\U0001F310 国外网站"
-- "RULE-SET,naver,\U0001F310 国外网站"
-- "RULE-SET,ehgallery,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-asia-east,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-asia-eastsouth,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-asia-south,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-asia-central,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-asia-west,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-america-north,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-america-south,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-europe-west,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-europe-east,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-oceania,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-antarctica,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-africa-north,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-africa-south,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-africa-west,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-africa-east,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-d-africa-central,\U0001F310 国外网站"
-- "RULE-SET,acc-geo-ip-asia-east,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-asia-eastsouth,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-asia-south,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-asia-central,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-asia-west,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-america-north,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-america-south,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-europe-west,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-europe-east,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-oceania,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-antarctica,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-africa-north,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-africa-south,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-africa-west,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-africa-east,\U0001F310 国外网站,no-resolve"
-- "RULE-SET,acc-geo-ip-africa-central,\U0001F310 国外网站,no-resolve"
-- "DOMAIN-SUFFIX,archive.org,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,udemy.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,udemycdn.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,grammarly.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,grammarly.io,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,jetbrains.net,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,theguardian.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,guardianapis.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,box.com,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,boxcdn.net,\U0001F310 国外网站"
-- "DOMAIN-SUFFIX,noip.com,\U0001F310 国外网站"
-- GEOIP,cloudflare,🌐 国外网站,no-resolve
-- "DOMAIN-SUFFIX,bca.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,klikbca.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,bni.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,bri.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,bankmandiri.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,danamon.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,permatabank.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,cimbniaga.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,btn.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,ocbcnisp.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,banksinarmas.com,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,idx.co.id,\U0001F3E6 金融支付"
-- "DOMAIN-SUFFIX,ksei.co.id,\U0001F3E6 金融支付"
-
-  # ============ 国内游戏 ============
-- "DOMAIN-SUFFIX,mihoyo.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,miyoushe.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,yuanshen.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,bhsr.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,zenlesszonezero.com,\U0001F579️ 国内游戏"
-- "DOMAIN,game.163.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,gm.163.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,ds.163.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,nie.163.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,nie.netease.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,update.netease.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,netease.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,wegame.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,wegame.com.cn,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,perfect-world.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,wanmei.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,xd.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,taptap.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,taptap.io,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,papegames.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,hypergryph.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,gryphline.com,\U0001F579️ 国内游戏"
-- "DOMAIN-SUFFIX,lilith.com,\U0001F579️ 国内游戏"
-- "RULE-SET,steamcn,\U0001F579️ 国内游戏"
-- "RULE-SET,wanmeishijie,\U0001F579️ 国内游戏"
-- "RULE-SET,wankahuanju,\U0001F579️ 国内游戏"
-- "RULE-SET,majsoul,\U0001F579️ 国内游戏"
-
-  # ============ 国内流媒体 ============
-- "RULE-SET,bilibili,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,iqiyi.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,iqiyipic.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,71.am,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,youku.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,ykimg.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,soku.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,v.qq.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,video.qq.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-KEYWORD,tencentvideo,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,mgtv.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,hitv.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,hunantv.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,douyin.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,douyinpic.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,douyinvod.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,ixigua.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,pstatp.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,snssdk.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,sohu.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,music.163.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,ntes53.netease.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,y.qq.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,music.qq.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,kugou.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,kuwo.cn,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,xiaohongshu.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,xhscdn.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,kuaishou.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,gifshow.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,weibo.com,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,weibo.cn,\U0001F4FA 国内流媒体"
-- "DOMAIN-SUFFIX,sinaimg.cn,\U0001F4FA 国内流媒体"
-- "RULE-SET,iqiyi,\U0001F4FA 国内流媒体"
-- "RULE-SET,youku,\U0001F4FA 国内流媒体"
-- "RULE-SET,tencentvideo,\U0001F4FA 国内流媒体"
-- "RULE-SET,douyin,\U0001F4FA 国内流媒体"
-- "RULE-SET,bytedance,\U0001F4FA 国内流媒体"
-- "RULE-SET,kuaishou,\U0001F4FA 国内流媒体"
-- "RULE-SET,weibo,\U0001F4FA 国内流媒体"
-- "RULE-SET,xiaohongshu,\U0001F4FA 国内流媒体"
-- "RULE-SET,neteasemusic,\U0001F4FA 国内流媒体"
-- "RULE-SET,kugoukuwo,\U0001F4FA 国内流媒体"
-- "RULE-SET,sohu,\U0001F4FA 国内流媒体"
-- "RULE-SET,acfun,\U0001F4FA 国内流媒体"
-- "RULE-SET,douyu,\U0001F4FA 国内流媒体"
-- "RULE-SET,huya,\U0001F4FA 国内流媒体"
-- "RULE-SET,himalaya,\U0001F4FA 国内流媒体"
-- "RULE-SET,cctv,\U0001F4FA 国内流媒体"
-- "RULE-SET,hunantv,\U0001F4FA 国内流媒体"
-- "RULE-SET,pptv,\U0001F4FA 国内流媒体"
-- "RULE-SET,funshion,\U0001F4FA 国内流媒体"
-- "RULE-SET,letv,\U0001F4FA 国内流媒体"
-- "RULE-SET,taihemusic,\U0001F4FA 国内流媒体"
-- "RULE-SET,kukemusic,\U0001F4FA 国内流媒体"
-- "RULE-SET,hibymusic,\U0001F4FA 国内流媒体"
-- "RULE-SET,miwu,\U0001F4FA 国内流媒体"
-- "RULE-SET,migu,\U0001F4FA 国内流媒体"
-- "RULE-SET,iptvmainland,\U0001F4FA 国内流媒体"
-- "RULE-SET,iptvother,\U0001F4FA 国内流媒体"
-- "RULE-SET,cibn,\U0001F4FA 国内流媒体"
-- "RULE-SET,bestv,\U0001F4FA 国内流媒体"
-- "RULE-SET,huashutv,\U0001F4FA 国内流媒体"
-- "RULE-SET,smg,\U0001F4FA 国内流媒体"
-- "RULE-SET,hwtv,\U0001F4FA 国内流媒体"
-- "RULE-SET,nivodtv,\U0001F4FA 国内流媒体"
-- "RULE-SET,olevod,\U0001F4FA 国内流媒体"
-- "RULE-SET,dandanzan,\U0001F4FA 国内流媒体"
-- "RULE-SET,dandanplay,\U0001F4FA 国内流媒体"
-- "RULE-SET,tiantiankankan,\U0001F4FA 国内流媒体"
-- "RULE-SET,yizhibo,\U0001F4FA 国内流媒体"
-- "RULE-SET,ku6,\U0001F4FA 国内流媒体"
-- "RULE-SET,56,\U0001F4FA 国内流媒体"
-- "RULE-SET,cetv,\U0001F4FA 国内流媒体"
-- "RULE-SET,yyets,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-alipan,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-baidunetdisk,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-weiyun,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-bilibili,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-douyin,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-kuaishou,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-xiaohongshu,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-xigua,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-weibo,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-zhihu,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-tieba,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-douban,\U0001F4FA 国内流媒体"
-- "RULE-SET,acc-fl-xianyu,\U0001F4FA 国内流媒体"
-
-  # ============ 国内网站 ============
-- "DOMAIN-SUFFIX,163.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,126.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,126.net,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,jianguoyun.com,\U0001F3E0 国内网站"
-# v5.4.19 #2 借鉴 Proxy-override：国内前端 CDN 直连前置（纯静态库托管，无 tracker 冲突）。
-- "DOMAIN-SUFFIX,baomitu.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,bootcss.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,staticfile.org,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,upaiyun.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,zhimg.com,\U0001F3E0 国内网站"
-- "RULE-SET,cn,\U0001F3E0 国内网站"
-- "RULE-SET,cn-ip,\U0001F3E0 国内网站,no-resolve"
-- "DOMAIN-SUFFIX,alimama.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,zxtdjy.com,\U0001F3E0 国内网站"
-- "DOMAIN-SUFFIX,zhihu.co,\U0001F3E0 国内网站"
-- "RULE-SET,acc-chinamax,\U0001F3E0 国内网站"
-# v5.4.4 FIX#144: bbys.app 视频播放走直连
-- DOMAIN-SUFFIX,bbys.app,DIRECT
-- "RULE-SET,acc-aqara-cn,\U0001F3E0 国内网站"
-- "RULE-SET,acc-geo-d-asia-china,\U0001F3E0 国内网站"
-- "RULE-SET,acc-geo-ip-asia-china,\U0001F3E0 国内网站,no-resolve"
-- "GEOIP,CN,\U0001F3E0 国内网站,no-resolve"
-- "GEOIP,telegram,\U0001F4AC 即时通讯,no-resolve"
-- "GEOIP,netflix,\U0001F3A5 Netflix,no-resolve"
-- "GEOIP,facebook,\U0001F4F1 社交媒体,no-resolve"
-- "GEOIP,twitter,\U0001F4F1 社交媒体,no-resolve"
-- "GEOIP,google,\U0001F527 工具与服务,no-resolve"
-- "MATCH,\U0001F41F 漏网之鱼"
 OVERRIDE_EOF
 
 
@@ -4331,16 +1742,15 @@ OVERRIDE_EOF
 # Ruby Script — 节点过滤、区域分类、url-test 组生成、TLS 指纹注入
 # ★ 核心架构：22 个区域组（11 全部 + 11 家宽）type: url-test + include-all-proxies/explicit proxies ★
 # ============================================================================
-RUBY_SCRIPT="/tmp/clash_normal_ruby.rb"
 cat > "$RUBY_SCRIPT" << 'RUBY_EOF'
 #!/usr/bin/env ruby
 # encoding: utf-8
 require 'yaml'
 require 'digest'
 
-VERSION = "v5.4.24-oc-normal.1"
+VERSION = "v6.0.13-oc-normal.7"
 
-STATUS_LOG = "/tmp/clash_normal_status.log"
+STATUS_LOG = ARGV[2]
 File.open(STATUS_LOG, 'w') { |f| f.puts "[#{VERSION}] start" }
 def status(msg); File.open(STATUS_LOG, 'a') { |f| f.puts(msg) }; end
 
@@ -4349,6 +1759,576 @@ override_path = ARGV[1]
 
 config   = YAML.load_file(config_path, permitted_classes: [Symbol], aliases: true)
 override = YAML.load_file(override_path, permitted_classes: [Symbol], aliases: true)
+
+# >>> SCKI NODE DNS HINTS: BEGIN — generated from tools/runtime/subscription-adapter-profiles.json + tools/runtime/node-dns-hints.rb; edit the runtime Module, then run this synchronizer.
+# Generated from tools/runtime/subscription-adapter-profiles.json; do not edit in adapters.
+module SckiSubscriptionAdapterProfiles
+  DEFAULT = "adaptive".freeze
+  MODES = {
+    "off" => { "id" => "off".freeze, "node_dns_projection" => "off".freeze }.freeze,
+    "policy" => { "id" => "policy".freeze, "node_dns_projection" => "policy".freeze }.freeze,
+    "adaptive" => { "id" => "adaptive".freeze, "node_dns_projection" => "adaptive".freeze }.freeze
+  }.freeze
+
+  module_function
+
+  def resolve(requested_profile)
+    requested = requested_profile.is_a?(String) ? requested_profile : ""
+    selected = MODES.fetch(requested, MODES.fetch(DEFAULT))
+    { "id" => selected.fetch("id"), "node_dns_projection" => selected.fetch("node_dns_projection") }.freeze
+  end
+end
+
+# Subscription Adapter Module — embedded verbatim into OpenClash Ruby adapters.
+#
+# Interface:
+#   SckiSubscriptionAdapter.capture_node_dns(source, active_servers, profile)
+#   SckiSubscriptionAdapter.apply_node_dns(repository, snapshot, profile)
+#
+# The generated profile fragment supplies SckiSubscriptionAdapterProfiles.
+
+module SckiSubscriptionAdapter
+  module_function
+
+  NODE_DNS_HINT_LIMITS = {
+    active_node_servers: 512,
+    domains: 128,
+    resolvers: 64,
+    policies: 64,
+    hosts: 64,
+    values: 8,
+    source_entries: 256,
+    source_exact_entries: 4096,
+    string_length: 512,
+  }.freeze
+
+  def plain_hash?(value)
+    value.is_a?(Hash)
+  end
+
+  def record_reject(snapshot, count = 1)
+    snapshot.fetch("stats")["rejected"] += count
+  end
+
+  def push_unique(list, value)
+    return false if list.any? { |entry| yield(entry) == yield(value) }
+
+    list << value
+    true
+  end
+
+  def ipv4?(value)
+    parts = value.to_s.split(".")
+    return false unless parts.length == 4
+
+    parts.all? { |part| part.match?(/\A\d{1,3}\z/) && part.to_i.between?(0, 255) }
+  end
+
+  def ipv6?(value)
+    text = value.to_s
+    match = text.match(/\A\[([0-9a-fA-F:.]+)\]\z/)
+    text = match[1] if match
+    return false if text.empty? || !text.match?(/\A[0-9a-fA-F:.]+\z/) || !text.include?(":") || text.include?(":::")
+
+    last_colon = text.rindex(":")
+    ipv4_tail = last_colon ? text[(last_colon + 1)..] : ""
+    if ipv4_tail.include?(".")
+      return false unless ipv4?(ipv4_tail)
+
+      text = "#{text[0..last_colon]}0:0"
+    end
+
+    compressed_at = text.index("::")
+    return false if compressed_at && text.index("::", compressed_at + 2)
+
+    groups = text.split(":").reject(&:empty?)
+    return false unless groups.all? { |group| group.match?(/\A[0-9a-fA-F]{1,4}\z/) }
+
+    compressed_at ? groups.length < 8 : groups.length == 8
+  end
+
+  def unbracket_ipv6(value)
+    text = value.to_s
+    text.start_with?("[") && text.end_with?("]") ? text[1..-2] : text
+  end
+
+  def normalize_domain(value)
+    return "" unless value.is_a?(String)
+    return "" if value.length > NODE_DNS_HINT_LIMITS[:string_length]
+
+    domain = value.strip.downcase.sub(/\.+\z/, "")
+    return "" if domain.empty? || domain.length > NODE_DNS_HINT_LIMITS[:string_length] || domain.length > 253 || domain.match?(/[\x00-\x20\\\/@:?#\[\]]/)
+    return "" if domain == "localhost" || domain.match?(/\A\d+(?:\.\d+){3}\z/)
+
+    labels = domain.split(".")
+    return "" unless labels.all? { |label| label.match?(/\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/) }
+
+    domain
+  end
+
+  def normalize_resolver(value)
+    return "" unless value.is_a?(String)
+    return "" if value.length > NODE_DNS_HINT_LIMITS[:string_length]
+
+    resolver = value.strip
+    return "" if resolver.empty? || resolver.length > NODE_DNS_HINT_LIMITS[:string_length] || resolver.match?(/[\x00-\x20]/)
+    return "" if resolver.include?("#") || resolver.match?(/\A(?:system|dhcp)\z/i) || resolver.match?(/\Arcode:/i)
+    return "" if resolver.match?(/[?&](?:skip-cert-verify|ecs|h3)=/i)
+    return resolver.downcase if ipv4?(resolver)
+    return unbracket_ipv6(resolver).downcase if ipv6?(resolver)
+
+    raw_domain = normalize_domain(resolver)
+    return raw_domain unless raw_domain.empty?
+
+    match = resolver.match(/\A(udp|tcp|tls|https|quic):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(\/[^\s]*)?\z/i)
+    return "" unless match
+
+    port = match[3]&.to_i
+    return "" if port && !port.between?(1, 65_535)
+
+    host = match[2]
+    host = unbracket_ipv6(host).downcase if ipv6?(host)
+    unless ipv6?(host) || ipv4?(host)
+      host = normalize_domain(host)
+      return "" if host.empty?
+    end
+    "#{match[1].downcase}://#{host}#{match[3] ? ":#{match[3]}" : ""}#{match[4] || ""}"
+  end
+
+  def resolver_host(value)
+    resolver = value.to_s
+    return "" if ipv4?(resolver) || ipv6?(resolver)
+
+    raw_domain = normalize_domain(resolver)
+    return raw_domain unless raw_domain.empty?
+
+    match = resolver.match(/\A(?:udp|tcp|tls|https|quic):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::\d{1,5})?(?:\/[^\s]*)?\z/i)
+    return "" unless match
+    return "" if ipv4?(match[1]) || ipv6?(match[1])
+
+    normalize_domain(match[1])
+  end
+
+  def normalize_resolver_list(value, snapshot)
+    raw_values = value.is_a?(Array) ? value : (value.is_a?(String) ? [value] : [])
+    unless value.is_a?(Array) || value.is_a?(String)
+      record_reject(snapshot)
+      return []
+    end
+
+    output = []
+    raw_values.take(NODE_DNS_HINT_LIMITS[:values]).each do |entry|
+      resolver = normalize_resolver(entry)
+      if resolver.empty?
+        record_reject(snapshot)
+        next
+      end
+      # normalize_resolver lower-cases only scheme and hostname. Keep URL
+      # path/query exact because they can be case-sensitive.
+      push_unique(output, resolver) { |item| item }
+    end
+    record_reject(snapshot, raw_values.length - NODE_DNS_HINT_LIMITS[:values]) if raw_values.length > NODE_DNS_HINT_LIMITS[:values]
+    output
+  end
+
+  def normalize_host_values(value, snapshot)
+    raw_values = value.is_a?(Array) ? value : (value.is_a?(String) ? [value] : [])
+    unless value.is_a?(Array) || value.is_a?(String)
+      record_reject(snapshot)
+      return nil
+    end
+
+    ip_values = []
+    redirects = []
+    raw_values.take(NODE_DNS_HINT_LIMITS[:values]).each do |entry|
+      unless entry.is_a?(String)
+        record_reject(snapshot)
+        next
+      end
+      if entry.length > NODE_DNS_HINT_LIMITS[:string_length]
+        record_reject(snapshot)
+        next
+      end
+      host = entry.strip
+      ipv6_literal = ipv6?(host)
+      # IPv6 literals may be bracketed. Other URL/control syntax is rejected.
+      if host.empty? || host.length > NODE_DNS_HINT_LIMITS[:string_length] || (!ipv6_literal && host.match?(/[\x00-\x20\\\/@?#\[\]]/))
+        record_reject(snapshot)
+        next
+      end
+      if ipv6_literal
+        host = unbracket_ipv6(host).downcase
+        push_unique(ip_values, host) { |item| item.downcase }
+      elsif ipv4?(host)
+        push_unique(ip_values, host) { |item| item.downcase }
+      else
+        host = normalize_domain(host)
+        if host.empty?
+          record_reject(snapshot)
+          next
+        end
+        push_unique(redirects, host) { |item| item.downcase }
+      end
+    end
+    record_reject(snapshot, raw_values.length - NODE_DNS_HINT_LIMITS[:values]) if raw_values.length > NODE_DNS_HINT_LIMITS[:values]
+    if redirects.any?
+      return redirects.first if redirects.length == 1 && ip_values.empty?
+
+      record_reject(snapshot)
+      return nil
+    end
+    ip_values.any? ? ip_values : nil
+  end
+
+  def normalize_pattern(value)
+    return "" unless value.is_a?(String)
+    return "" if value.length > NODE_DNS_HINT_LIMITS[:string_length]
+
+    pattern = value.strip.downcase.sub(/\.+\z/, "")
+    return "" if pattern.empty? || pattern.length > 253 || pattern.match?(/[\x00-\x20\\\/@:?#\[\]]/) || pattern == "*"
+    return normalize_domain(pattern[2..]).empty? ? "" : pattern if pattern.start_with?("+.")
+    return normalize_domain(pattern[1..]).empty? ? "" : pattern if pattern.start_with?(".")
+
+    if pattern.include?("*")
+      labels = pattern.split(".")
+      return "" if labels.length < 2
+      return "" unless labels.all? { |label| label == "*" || label.match?(/\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/) }
+
+      return pattern
+    end
+    normalize_domain(pattern)
+  end
+
+  def pattern_matches?(pattern, domain)
+    if pattern.start_with?("+.")
+      base = pattern[2..]
+      return domain == base || domain.end_with?(".#{base}")
+    end
+    if pattern.start_with?(".")
+      base = pattern[1..]
+      return domain != base && domain.end_with?(".#{base}")
+    end
+    if pattern.include?("*")
+      pattern_labels = pattern.split(".")
+      domain_labels = domain.split(".")
+      return false unless pattern_labels.length == domain_labels.length
+
+      return pattern_labels.zip(domain_labels).all? { |expected, actual| expected == "*" || expected == actual }
+    end
+    pattern == domain
+  end
+
+  def pattern_score(pattern)
+    return 3_000 + (pattern.split(".").length * 10) + pattern.delete("*").length if pattern.include?("*")
+    return 2_000 + pattern.length if pattern.start_with?("+.") || pattern.start_with?(".")
+
+    10_000 + pattern.length
+  end
+
+  def same_values?(left, right)
+    if left.is_a?(Array) || right.is_a?(Array)
+      return false unless left.is_a?(Array) && right.is_a?(Array) && left.length == right.length
+
+      return left.zip(right).all? { |a, b| a.to_s == b.to_s }
+    end
+    left.is_a?(String) && right.is_a?(String) && left == right
+  end
+
+  def has_values?(value)
+    value.is_a?(Array) ? value.any? : (value.is_a?(String) && !value.empty?)
+  end
+
+  def copy_value(value)
+    value.is_a?(Array) ? value.dup : value
+  end
+
+  def exact_pattern?(pattern)
+    !pattern.include?("*") && !pattern.start_with?("+.") && !pattern.start_with?(".")
+  end
+
+  def build_source_view(source, active_domains, snapshot)
+    return {} unless plain_hash?(source)
+
+    view = {}
+    active = {}
+    active_domains.each do |domain|
+      active[domain] = true
+      view[domain] = source[domain] if source.key?(domain)
+      dotted = "#{domain}."
+      view[dotted] = source[dotted] if source.key?(dotted) && !view.key?(dotted)
+    end
+    # Avoid source.keys: it allocates the whole untrusted map before a cap can
+    # take effect. The wider bounded pass preserves case-insensitive exact
+    # active-node keys; wildcard matching remains on the tighter cap.
+    scanned_entries = 0
+    wildcard_entries = 0
+    source.each_pair do |raw_pattern, raw_value|
+      scanned_entries += 1
+      if scanned_entries > NODE_DNS_HINT_LIMITS[:source_exact_entries]
+        record_reject(snapshot)
+        break
+      end
+      pattern = normalize_pattern(raw_pattern)
+      if pattern.empty?
+        record_reject(snapshot)
+        next
+      end
+      if exact_pattern?(pattern)
+        view[raw_pattern] = raw_value if active[pattern]
+        next
+      end
+      if wildcard_entries >= NODE_DNS_HINT_LIMITS[:source_entries]
+        record_reject(snapshot)
+        next
+      end
+      wildcard_entries += 1
+
+      view[raw_pattern] = raw_value
+    end
+    view
+  end
+
+  def select_for_domain(source, domain, snapshot)
+    return { "matched" => false, "value" => nil } unless plain_hash?(source)
+
+    best = nil
+    best_score = -1
+    conflict = false
+    matched = false
+    source.each do |raw_pattern, raw_value|
+      pattern = normalize_pattern(raw_pattern)
+      next if pattern.empty? || !pattern_matches?(pattern, domain)
+
+      matched = true
+      values = yield(raw_value, snapshot)
+      next unless has_values?(values)
+
+      score = pattern_score(pattern)
+      if score > best_score
+        best = copy_value(values)
+        best_score = score
+        conflict = false
+      elsif score == best_score && !same_values?(best, values)
+        conflict = true
+      end
+    end
+    if conflict
+      record_reject(snapshot)
+      return { "matched" => true, "value" => nil }
+    end
+    { "matched" => matched, "value" => best }
+  end
+
+  def resolve_profile(runtime_profile)
+    requested = if runtime_profile.is_a?(String)
+                  runtime_profile
+                elsif plain_hash?(runtime_profile) && runtime_profile["id"].is_a?(String)
+                  runtime_profile["id"]
+                else
+                  ""
+                end
+    SckiSubscriptionAdapterProfiles.resolve(requested)
+  end
+
+  def create_snapshot(profile)
+    {
+      "profile" => profile.fetch("id"),
+      "domains" => [],
+      "resolvers" => [],
+      "policy" => {},
+      "hosts" => {},
+      "stats" => { "domains" => 0, "resolvers" => 0, "policies" => 0, "hosts" => 0, "rejected" => 0 },
+    }
+  end
+
+  def add_policy(snapshot, domain, values)
+    new_resolvers = []
+    values.each do |resolver|
+      known = snapshot.fetch("resolvers").any? { |entry| entry == resolver } || new_resolvers.any? { |entry| entry == resolver }
+      new_resolvers << resolver unless known
+    end
+    if snapshot.fetch("resolvers").length + new_resolvers.length > NODE_DNS_HINT_LIMITS[:resolvers]
+      record_reject(snapshot, values.length)
+      return false
+    end
+    snapshot.fetch("policy")[domain] = values.dup
+    snapshot.fetch("resolvers").concat(new_resolvers)
+    true
+  end
+
+  def capture_node_dns(source_config, active_node_servers, runtime_profile)
+    profile = resolve_profile(runtime_profile)
+    snapshot = create_snapshot(profile)
+    return snapshot if profile.fetch("node_dns_projection") == "off"
+    return snapshot unless source_config.is_a?(Hash) && active_node_servers.is_a?(Array)
+
+    servers = active_node_servers.take(NODE_DNS_HINT_LIMITS[:active_node_servers])
+    record_reject(snapshot, active_node_servers.length - NODE_DNS_HINT_LIMITS[:active_node_servers]) if active_node_servers.length > NODE_DNS_HINT_LIMITS[:active_node_servers]
+    servers.each do |server|
+      domain = normalize_domain(server)
+      next if domain.empty?
+      if snapshot.fetch("domains").length >= NODE_DNS_HINT_LIMITS[:domains]
+        record_reject(snapshot)
+        next
+      end
+      push_unique(snapshot.fetch("domains"), domain) { |item| item }
+    end
+    snapshot.fetch("stats")["domains"] = snapshot.fetch("domains").length
+    return snapshot if snapshot.fetch("domains").empty?
+
+    source_dns = plain_hash?(source_config["dns"]) ? source_config["dns"] : {}
+    source_proxy_resolvers = profile.fetch("node_dns_projection") == "adaptive" && source_dns.key?("proxy-server-nameserver") ? normalize_resolver_list(source_dns["proxy-server-nameserver"], snapshot) : []
+    source_node_policy = build_source_view(source_dns["proxy-server-nameserver-policy"], snapshot.fetch("domains"), snapshot)
+    source_global_policy = build_source_view(source_dns["nameserver-policy"], snapshot.fetch("domains"), snapshot)
+
+    snapshot.fetch("domains").each do |domain|
+      if snapshot.fetch("policy").length >= NODE_DNS_HINT_LIMITS[:policies]
+        record_reject(snapshot)
+        next
+      end
+      selection = select_for_domain(source_node_policy, domain, snapshot) { |value, state| normalize_resolver_list(value, state) }
+      selection = select_for_domain(source_global_policy, domain, snapshot) { |value, state| normalize_resolver_list(value, state) } unless selection.fetch("matched")
+      if !selection.fetch("matched") && profile.fetch("node_dns_projection") == "adaptive" && source_proxy_resolvers.any?
+        selection = { "matched" => true, "value" => source_proxy_resolvers.dup }
+      end
+      next unless has_values?(selection.fetch("value"))
+
+      add_policy(snapshot, domain, selection.fetch("value"))
+    end
+
+    host_targets = []
+    snapshot.fetch("resolvers").each do |resolver|
+      host = resolver_host(resolver)
+      push_unique(host_targets, host) { |item| item } unless host.empty?
+    end
+    snapshot.fetch("policy").keys.each { |domain| push_unique(host_targets, domain) { |item| item } }
+    source_hosts = build_source_view(source_config["hosts"], host_targets, snapshot)
+    host_targets.each do |domain|
+      if snapshot.fetch("hosts").length >= NODE_DNS_HINT_LIMITS[:hosts]
+        record_reject(snapshot)
+        next
+      end
+      selection = select_for_domain(source_hosts, domain, snapshot) { |value, state| normalize_host_values(value, state) }
+      snapshot.fetch("hosts")[domain] = copy_value(selection.fetch("value")) if has_values?(selection.fetch("value"))
+    end
+
+    snapshot.fetch("stats")["resolvers"] = snapshot.fetch("resolvers").length
+    snapshot.fetch("stats")["policies"] = snapshot.fetch("policy").length
+    snapshot.fetch("stats")["hosts"] = snapshot.fetch("hosts").length
+    snapshot
+  end
+
+  def repository_pss_baseline?(dns)
+    values = dns && dns["proxy-server-nameserver"]
+    return values.strip.length.positive? if values.is_a?(String)
+
+    values.is_a?(Array) && values.any? { |value| value.is_a?(String) && value.strip.length.positive? }
+  end
+
+  def build_report(profile, snapshot, applied, reason)
+    stats = snapshot.is_a?(Hash) && plain_hash?(snapshot["stats"]) ? snapshot["stats"] : {}
+    {
+      "profile" => profile.fetch("id"),
+      "mode" => profile.fetch("node_dns_projection"),
+      "applied" => !!applied,
+      "reason" => reason,
+      "domains" => stats.fetch("domains", 0).to_i,
+      "resolvers" => stats.fetch("resolvers", 0).to_i,
+      "policies" => stats.fetch("policies", 0).to_i,
+      "hosts" => stats.fetch("hosts", 0).to_i,
+      "rejected" => stats.fetch("rejected", 0).to_i,
+    }
+  end
+
+  # capture_node_dns produces an opaque snapshot, but apply_node_dns validates
+  # its declared active-node domain closure before mutating repository-owned
+  # DNS. This keeps the public seam fail-closed if a future Adapter passes a
+  # stale or hand-built Hash.
+  def canonical_resolver_values?(values)
+    return false unless values.is_a?(Array) && values.any? && values.length <= NODE_DNS_HINT_LIMITS[:values]
+
+    seen = {}
+    values.each do |value|
+      return false unless value.is_a?(String) && normalize_resolver(value) == value
+      return false if seen[value]
+
+      seen[value] = true
+    end
+    true
+  end
+
+  def canonical_host_value?(value)
+    scratch = { "stats" => { "rejected" => 0 } }
+    normalized = normalize_host_values(value, scratch)
+    scratch.fetch("stats").fetch("rejected").zero? && has_values?(normalized) && same_values?(normalized, value)
+  end
+
+  def validate_snapshot(snapshot, profile)
+    return { "ok" => false, "reason" => "invalid-snapshot" } unless plain_hash?(snapshot) && plain_hash?(snapshot["policy"]) && plain_hash?(snapshot["hosts"])
+    return { "ok" => false, "reason" => "profile-mismatch" } unless snapshot["profile"] == profile.fetch("id")
+    return { "ok" => false, "reason" => "invalid-snapshot" } unless snapshot["domains"].is_a?(Array) && snapshot.fetch("domains").length <= NODE_DNS_HINT_LIMITS[:domains]
+
+    active_domains = {}
+    snapshot.fetch("domains").each do |active_domain|
+      return { "ok" => false, "reason" => "invalid-snapshot" } unless active_domain.is_a?(String) && normalize_domain(active_domain) == active_domain && !active_domains[active_domain]
+
+      active_domains[active_domain] = true
+    end
+
+    policy_keys = []
+    allowed_host_domains = {}
+    snapshot.fetch("policy").each_pair do |domain, values|
+      return { "ok" => false, "reason" => "invalid-snapshot" } if policy_keys.length >= NODE_DNS_HINT_LIMITS[:policies] || !active_domains[domain] || normalize_domain(domain) != domain || !canonical_resolver_values?(values)
+
+      policy_keys << domain
+      allowed_host_domains[domain] = true
+      values.each do |resolver|
+        resolver_domain = resolver_host(resolver)
+        allowed_host_domains[resolver_domain] = true unless resolver_domain.empty?
+      end
+    end
+    host_keys = []
+    snapshot.fetch("hosts").each_pair do |domain, value|
+      return { "ok" => false, "reason" => "invalid-snapshot" } if host_keys.length >= NODE_DNS_HINT_LIMITS[:hosts] || !allowed_host_domains[domain] || normalize_domain(domain) != domain || !canonical_host_value?(value)
+
+      host_keys << domain
+    end
+    { "ok" => true, "policy_keys" => policy_keys, "host_keys" => host_keys }
+  end
+
+  def apply_node_dns(repository_config, snapshot, runtime_profile)
+    profile = resolve_profile(runtime_profile)
+    return build_report(profile, snapshot, false, "profile-off") if profile.fetch("node_dns_projection") == "off"
+    return build_report(profile, snapshot, false, "invalid-repository-config") unless plain_hash?(repository_config) && plain_hash?(repository_config["dns"])
+    return build_report(profile, snapshot, false, "missing-pss-baseline") unless repository_pss_baseline?(repository_config["dns"])
+    validation = validate_snapshot(snapshot, profile)
+    return build_report(profile, snapshot, false, validation.fetch("reason")) unless validation.fetch("ok")
+
+    policy_keys = validation.fetch("policy_keys")
+    host_keys = validation.fetch("host_keys")
+    return build_report(profile, snapshot, false, "no-hints") if policy_keys.empty? && host_keys.empty?
+
+    if policy_keys.any?
+      repository_config.fetch("dns")["proxy-server-nameserver-policy"] = {}
+      policy_keys.each { |domain| repository_config.fetch("dns")["proxy-server-nameserver-policy"][domain] = snapshot.fetch("policy").fetch(domain).dup }
+    else
+      repository_config.fetch("dns").delete("proxy-server-nameserver-policy")
+    end
+    repository_config["hosts"] = {} unless plain_hash?(repository_config["hosts"])
+    host_keys.each do |domain|
+      repository_config.fetch("hosts")[domain] = copy_value(snapshot.fetch("hosts").fetch(domain)) unless repository_config.fetch("hosts").key?(domain)
+    end
+    build_report(profile, snapshot, true, "applied")
+  end
+
+  private_class_method :plain_hash?, :record_reject, :push_unique, :ipv4?, :ipv6?, :unbracket_ipv6,
+                       :normalize_domain, :normalize_resolver, :resolver_host, :normalize_resolver_list,
+                       :normalize_host_values, :normalize_pattern, :pattern_matches?, :pattern_score,
+                       :same_values?, :has_values?, :copy_value, :exact_pattern?, :build_source_view,
+                       :select_for_domain, :create_snapshot, :add_policy, :repository_pss_baseline?, :build_report,
+                       :canonical_resolver_values?, :canonical_host_value?, :validate_snapshot
+end
+# <<< SCKI NODE DNS HINTS: END
 
 # ---------------------------------------------------------------
 # Phase 1a: 过滤节点（仅去信息节点；保留倍率节点）+ 家宽识别
@@ -4382,6 +2362,9 @@ filtered_proxies = raw_proxies.reject do |p|
 end
 is_residential = ->(name) { RESIDENTIAL_PATTERNS.any? { |pat| name.match?(pat) } }
 status "[filter] raw=#{raw_proxies.size} filtered=#{filtered_proxies.size} home=#{filtered_proxies.count { |p| is_residential.call(p['name'].to_s) }} removed=#{raw_proxies.size - filtered_proxies.size}"
+runtime_profile = SckiSubscriptionAdapterProfiles.resolve(ARGV[3])
+active_node_servers = filtered_proxies.map { |proxy| proxy["server"] }
+node_dns_hints = SckiSubscriptionAdapter.capture_node_dns(config, active_node_servers, runtime_profile)
 
 # ---------------------------------------------------------------
 # Phase 1b: 区域分类
@@ -4389,6 +2372,8 @@ status "[filter] raw=#{raw_proxies.size} filtered=#{filtered_proxies.size} home=
 REGIONS = {
   "HK"  => /香港|港|\bHK\b|HKG|Hong\s?Kong|🇭🇰/i,
   "TW"  => /台湾|台灣|\bTW\b|TWN|Taiwan|🇹🇼/i,
+  # v5.4.26 FIX#CN-APAC: 加入 CN 区域（对齐 Clash Party JS 基线 c.CN → apacNodes）
+  "CN"  => /中国|大陸|大陆|国内|回国|\bCN\b|CHN|China|mainland/i,
   "JP"  => /日本|\bJP\b|JPN|Japan|🇯🇵|Tokyo|Osaka/i,
   # v5.2.6-oc-normal.1 FIX#24-P0: 补 KOR（KOR 不是 KR 的子串，原始 /KR/ 无法匹配 "KOR 01"）
   #   HK/TW/JP/KR/SG 使用 \b 防误匹配，显式补充 alpha-3 码 HKG/TWN/JPN/KOR/SGP
@@ -4440,9 +2425,10 @@ REGIONS = {
 #   原实现每个 code 只落入 GROUP_MAP 的首个命中条目（下方 each/break），导致：
 #     • HK/TW/JP/KR 只进香港/台湾/日韩子组，永远进不了 🌏 亚太节点
 #     • US 只进美国子组，永远进不了 🌎 美洲节点
-#   Clash Party JS 主线语义：区域大组 = 子区域并集（SG 已独立为 🇸🇬 狮城节点，不再归入 🌏 亚太节点；
-#   americasNodes = US+AM）。修复：APAC 扩充至涵盖 HK/TW/JP/KR + 原 APAC_OTHER 集；AM 扩充至
+#   Clash Party JS 主线语义：区域大组 = 子区域并集（apacNodes = HK+TW+CN+JP+KR+SG+APAC_OTHER）；
+#   americasNodes = US+AM）。修复：APAC 扩充至涵盖 HK+TW+CN+JP+KR+SG + 原 APAC_OTHER 集；AM 扩充至
 #   包含 US；分类循环移除 break，同一节点可同时进入子区域组与所属大洲组。
+#   v5.4.26 FIX#CN-APAC: APAC 加入 "CN"（对齐 Clash Party JS 基线 apacNodes 包含 c.CN）
 GROUP_MAP = {
   "HK"     => ["HK"],
   "TW"     => ["TW"],
@@ -4452,7 +2438,7 @@ GROUP_MAP = {
   "EU"     => ["UK", "DE", "FR", "NL", "CH", "IT", "ES", "PT", "GR", "AT", "BE", "IE", "DK", "SE", "FI", "NO", "PL", "CZ", "RO", "HU", "RU"],
   "AM"     => ["US", "CA", "MX", "BR", "AR"],
   "AF"     => ["ZA", "EG", "NG"],
-  "APAC"   => ["HK", "TW", "JP", "KR", "SG", "IN", "TH", "VN", "MY", "ID", "PH", "AU", "NZ", "TR", "AE"],
+  "APAC"   => ["HK", "TW", "CN", "JP", "KR", "SG", "IN", "TH", "VN", "MY", "ID", "PH", "AU", "NZ", "TR", "AE"],
   "OTHER"  => ["OTHER"],
 }
 GROUP_NAMES = {
@@ -4480,8 +2466,16 @@ HOME_GROUP_NAMES = {
   "OTHER" => "🏡 其他家宽",
 }
 
+# Ruby 的 \b 把数字视为单词字符，故 hk01 不会命中 \bHK\b。只在
+# 字母与数字的交界插入分类边界，使小写 ISO 两位码 + 编号与 HK 01
+# 等传统写法等价，同时保持原有国家正则和抗误匹配规则。
+normalize_region_name = ->(name) {
+  name.to_s.gsub(/(?<=[A-Za-z])(?=\d)/, " ")
+}
+
 classify = ->(name) {
-  REGIONS.each { |code, re| return code if name.match?(re) }
+  normalized_name = normalize_region_name.call(name)
+  REGIONS.each { |code, re| return code if normalized_name.match?(re) }
   "OTHER"
 }
 
@@ -4520,7 +2514,7 @@ def make_smart_group(name, proxies_filter_mode:, explicit_proxies: nil)
     "name"               => name,
     "type"               => "url-test",
     "url"                => "https://cp.cloudflare.com/generate_204",
-    "interval"           => 180,
+    "interval"           => 300,
     "tolerance"          => 10,
     "lazy"               => false,
   }
@@ -4574,6 +2568,8 @@ config["proxies"] = filtered_proxies
    geox-url profile].each do |key|
   config[key] = override[key] if override.key?(key)
 end
+node_dns_report = SckiSubscriptionAdapter.apply_node_dns(config, node_dns_hints, runtime_profile)
+status "[node-dns] profile=#{node_dns_report['profile']} applied=#{node_dns_report['applied']} reason=#{node_dns_report['reason']} domains=#{node_dns_report['domains']} resolvers=#{node_dns_report['resolvers']} policies=#{node_dns_report['policies']} hosts=#{node_dns_report['hosts']} rejected=#{node_dns_report['rejected']}"
 
 # 清空并重建 proxy-groups：🌍 全球节点 → 业务组 → 其余区域组
 active_region_names = smart_groups.map { |g| g["name"] } + ["DIRECT", "REJECT"]
@@ -4608,17 +2604,17 @@ RUBY_EOF
 LOG_OUT "Info" "[Clash-Normal] Executing Ruby processor..."
 
 # 清理状态日志，准备接收 Ruby 输出
-rm -f /tmp/clash_normal_status.log
+: > "$STATUS_LOG"
 
 # 执行 Ruby 处理脚本
-ruby "$RUBY_SCRIPT" "$CONFIG_FILE" "$OVERRIDE_YAML" 2>> "$LOG_FILE"
+ruby "$RUBY_SCRIPT" "$CONFIG_FILE" "$OVERRIDE_YAML" "$STATUS_LOG" "$SCKI_SUBSCRIPTION_ADAPTER_PROFILE" 2>> "$LOG_FILE"
 RC=$?
 
 # 将 Ruby 的状态日志逐行回显到 OpenClash 日志
-if [ -f /tmp/clash_normal_status.log ]; then
+if [ -f "$STATUS_LOG" ]; then
   while IFS= read -r line; do
     LOG_OUT "Info" "[Clash-Normal] $line"
-  done < /tmp/clash_normal_status.log
+  done < "$STATUS_LOG"
 fi
 
 if [ $RC -eq 0 ]; then
@@ -4627,8 +2623,5 @@ else
   LOG_OUT "Error" "[Clash-Normal] $VERSION_TAG overwrite FAILED with exit code $RC."
   LOG_OUT "Error" "[Clash-Normal] Check $LOG_FILE for Ruby traceback."
 fi
-
-# 清理临时文件
-rm -f "$OVERRIDE_YAML" "$RUBY_SCRIPT" /tmp/clash_normal_status.log
 
 exit $RC

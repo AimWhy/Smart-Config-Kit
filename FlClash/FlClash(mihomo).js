@@ -1,7 +1,8 @@
 // FlClash 覆写脚本 — 标准 Mihomo 内核动态分流版
-// 版本：v5.4.25-flclash.1 (2026-06-03)
-// 架构：22 url-test 区域组（11 全部 + 11 家宽）+ 32 业务策略组（含 14 流媒体平台组）+ 382 rule-providers 100%+ 服务覆盖
-// 基线：Clash Party v5.4.25（规则 100% 等价；区域组为 url-test — FlClash 内核为标准 Mihomo，不支持 smart + LightGBM）
+// 版本：v6.0.13-flclash.9 (2026-09-03)
+// 架构：22 url-test 区域组（11 全部 + 11 家宽）+ 33 业务策略组 + 132 融合 rule-providers / 151 rules
+// 规则源：rulesets/source/routing-graph.js v6.0.13（规则 100% 等价；区域组为 url-test — FlClash 内核为标准 Mihomo，不支持 smart + LightGBM）
+// v6.0.13-flclash.9：LINUX DO 大陆备用域名 linuxdo.org 前置归入国内网站；主站 linux.do 保持受限网站
 // 适用：FlClash >= v0.8.85（覆盖脚本功能自该版本引入）；其他使用标准 Mihomo 内核的客户端
 // 变更历史：见 `FlClash/CHANGELOG.md`
 //
@@ -21,11 +22,11 @@
 //
 // ⚠️ GitHub 被墙时先确保代理已通，或用 jsdelivr CDN / 手动粘贴。
 //
-// === 脚本导入后必做的手动配置（FlClash UI 内操作） ===
-// 以下两项由 FlClash App UI 托管，覆写脚本无法注入，必须手动配置：
-//   1. 外部资源（GeoX URL）：编辑订阅 →「外部资源」标签 → 粘贴 geox-url YAML
-//   2. 进阶配置（DNS）：编辑订阅 →「进阶配置」标签 → 粘贴 dns YAML
-//   完整 YAML 见：FlClash/README.md → 第 4 步 必改配置
+// === 脚本导入后的应用层设置（FlClash UI 内操作） ===
+//   1. 关闭「DNS 覆写」和「追加系统 DNS」，保留本脚本 DNS；不要另粘贴 UI DNS。
+//   2. Android 开启 VPN、关闭 VPN「系统代理」；应用访问控制与 HTTP 代理不要混用。
+//   3. IPv6 需在 App UI 同时关闭；GeoX 可保留客户端默认，不强制改 CDN。
+//   原因、最终配置检查和分应用排障见 FlClash/README.md。
 //
 // === 与 CMFA YAML 的选择 ===
 // - 本 JS 脚本：动态节点分类（word-boundary 正则，精确度高于 YAML filter:）、
@@ -35,89 +36,15 @@
 //  版本常量
 // ================================================================
 
-const VERSION = 'v5.4.25-flclash.1'
+const VERSION = 'v6.0.13-flclash.9'
 
-// v5.4.9 FEAT#LOCAL-TOOLS: desktop local-tool direct whitelist.
-const LOCAL_TOOL_DIRECT_PROCESS_NAMES = [
-  'Oray.exe',
-  'OrayService.exe',
-  'SunloginClient.exe',
-  'SunloginClient_Desktop.exe',
-  'SunloginClient_Service.exe',
-  'AweSun.exe',
-  'AweSunService.exe',
-  'NodeBaby.exe',
-  'Node Baby.exe',
-  'nblink.exe',
-  'nblink',
-  'owjdxb.exe',
-  'tvnserver.exe',
-  'tvnserver',
-  'AnyDesk.exe',
-  'AnyDesk',
-  'ToDesk.exe',
-  'ToDesk_Service.exe',
-  'ToDesk',
-  'TeamViewer.exe',
-  'TeamViewer_Service.exe',
-  'TeamViewer',
-  'ZeroTier One.exe',
-  'zerotier-one.exe',
-  'zerotier-one_x64.exe',
-  'zerotier-one',
-  'Tailscale.exe',
-  'tailscale.exe',
-  'tailscaled.exe',
-  'Tailscale',
-  'tailscale',
-  'tailscaled',
-  'phddns.exe',
-  'phddns',
-  'ngrok.exe',
-  'ngrok',
-  'frpc.exe',
-  'frpc',
-  'frps.exe',
-  'frps',
-  'natapp.exe',
-  'natapp',
-  'cloudflared.exe',
-  'cloudflared',
-  'xmqtunnel.exe',
-  'xmqtunnel',
-  'Navicat.exe',
-  'navicat.exe',
-  'Navicat Premium.exe',
-  'Navicat',
-  'Navicat Premium',
-  // 游戏加速器 — 这些工具自身是网络加速隧道，走代理会导致双重代理/连接失败
-  'LeigodAcc.exe',
-  'LeigodAccel.exe',
-  'leigodaccel.exe',
-  'NeteaseUU.exe',
-  'NeteaseUUBrowser.exe',
-  'NNer.exe',
-  'NNerClient.exe',
-  'UU.exe',
-  'UUGameBooster.exe',
-  'UURepair.exe',
-  'UUService.exe',
-  'xhjsq.exe',
-  'XiaoHeiAccelerator.exe',
-  'xunyou.exe',
-  'XunYouAcc.exe',
-  'XunYouUpdate.exe',
-]
+// 受信任的本地订阅适配模式：off | policy | adaptive。
+// 不从机场订阅读取；三档均不会改变 55 组、规则或仓库 DNS 基线。
+const SCKI_SUBSCRIPTION_ADAPTER_PROFILE = 'adaptive'
 
-const RUSTDESK_WORK_PROCESS_NAMES = [
-  'RustDesk.exe',
-  'rustdesk.exe',
-  'RustDesk',
-  'rustdesk',
-]
-
-// FlClash JS 引擎环境兼容：QuickJS 可能不提供 console，安全包装
-var log = (typeof console !== 'undefined' && console.log) ? console.log.bind(console) : function(){}
+function log() {
+  if (typeof console !== 'undefined' && console.log) console.log.apply(console, arguments)
+}
 
 // ================================================================
 //  模块 A：节点过滤 / 家宽识别
@@ -183,12 +110,24 @@ function _getWordBoundaryRegex(keyword, caseSensitive) {
   _regexCache.set(key, re)
   return re
 }
+// ISO alpha-2 在机场节点中常被写成 hk01 / us-05。不能直接让全部 ISO
+// 忽略大小写：US、IN 等会误命中普通英文词。仅在紧随编号时放开大小写，
+// 并继续沿用“非英文字母”为边界的跨平台约定。
+function _getNumberedIsoRegex(keyword) {
+  const key = 'N:' + keyword
+  if (_regexCache.has(key)) return _regexCache.get(key)
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp('(^|[^a-zA-Z])' + escaped + '(?=[^a-zA-Z]*[0-9])', 'i')
+  _regexCache.set(key, re)
+  return re
+}
 function _isChinese(str) { return /[\u4e00-\u9fa5]/.test(str) }
 
 const _compiledRegions = REGION_DB.map(function(region) {
   var matchers = []
   for (var i = 0; i < region.iso.length; i++) {
     matchers.push({ type: 'iso', regex: _getWordBoundaryRegex(region.iso[i], true) })
+    matchers.push({ type: 'iso-numbered', regex: _getNumberedIsoRegex(region.iso[i]) })
   }
   for (var j = 0; j < region.kw.length; j++) {
     var kw = region.kw[j]
@@ -198,9 +137,17 @@ const _compiledRegions = REGION_DB.map(function(region) {
   return { id: region.id, matchers: matchers }
 })
 
+// 运营商/线路营销词不表示节点落地地区。先从分类输入中剥离；仅当没有任何
+// 地区信号命中时，才把只含此类标签的节点兜底归为 CN。
+const _CN_CARRIER_LABEL_RE = /中国(?:电信|联通|移动|铁通)|电信|联通|移动|铁通|\bchina[\s_-]*(?:telecom|unicom|mobile)\b|\b(?:chinatelecom|chinaunicom|chinamobile)\b/i
+function _stripCnCarrierLabels(name) {
+  return name.replace(/中国(?:电信|联通|移动|铁通)|电信|联通|移动|铁通|\bchina[\s_-]*(?:telecom|unicom|mobile)\b|\b(?:chinatelecom|chinaunicom|chinamobile)\b/ig, ' ')
+}
+
 function classifyNode(name) {
-  var nameStr = String(name || '')
-  if (!nameStr) return null
+  var originalName = String(name || '')
+  if (!originalName) return null
+  var nameStr = _stripCnCarrierLabels(originalName)
   for (var i = 0; i < _compiledRegions.length; i++) {
     var region = _compiledRegions[i]
     for (var j = 0; j < region.matchers.length; j++) {
@@ -209,14 +156,14 @@ function classifyNode(name) {
       else { if (m.regex.test(nameStr)) return region.id }
     }
   }
+  if (_CN_CARRIER_LABEL_RE.test(originalName)) return 'CN'
   return 'OTHER'
 }
 
 function classifyAllNodes(proxies) {
   var result = {
-    HK: [], TW: [], CN: [], JP: [], KR: [], SG: [], US: [], EU: [], AM: [], AF: [], OTHER: [], ALL: [],
-    HOME_HK: [], HOME_TW: [], HOME_CN: [], HOME_JP: [], HOME_KR: [], HOME_SG: [], HOME_US: [], HOME_EU: [], HOME_AM: [], HOME_AF: [], HOME_OTHER: [], HOME_ALL: [],
-    UNCLASSIFIED: [], HOME_UNCLASSIFIED: [],
+    HK: [], TW: [], CN: [], JP: [], KR: [], SG: [], US: [], EU: [], AM: [], AF: [], APAC_OTHER: [], OTHER: [], ALL: [],
+    HOME_HK: [], HOME_TW: [], HOME_CN: [], HOME_JP: [], HOME_KR: [], HOME_SG: [], HOME_US: [], HOME_EU: [], HOME_AM: [], HOME_AF: [], HOME_APAC_OTHER: [], HOME_OTHER: [], HOME_ALL: [],
   }
   for (var i = 0; i < proxies.length; i++) {
     var p = proxies[i]
@@ -268,6 +215,7 @@ const BIZ = {
   STREAM_JP: '🇯🇵 日韩流媒体', STREAM_EU: '🇪🇺 欧洲流媒体',
   STREAM_OTHER: '🌐 其他国外流媒体',
   GAME_CN: '🕹️ 国内游戏', GAME_INTL: '🎮 国外游戏',
+  GOOGLE: '🔍 Google 服务',
   TOOLS: '🔧 工具与服务', MS: 'Ⓜ️ 微软服务', APPLE: '🍎 苹果服务',
   DOWNLOAD: '📥 下载更新', TRACKER: '🛰️ BT/PT Tracker',
   CN_SITE: '🏠 国内网站',
@@ -275,44 +223,37 @@ const BIZ = {
   FINAL: '🐟 漏网之鱼', AD: '🛑 广告拦截',
 }
 
-const ACC_BANK_RULES = ['US','UK','HK','SG','JP','AU','CA','DE','NL','FR'].map(function(cc) { return 'RULE-SET,acc-bank-' + cc.toLowerCase() + ',' + BIZ.PAYMENTS })
-const ACC_VF_RULES = ['paypal','wise','monzo','revolut'].map(function(svc) { return 'RULE-SET,acc-vf-' + svc + ',' + BIZ.PAYMENTS })
-const ACC_FAKE_LOCATION_RULES = ['bilibili','douyin','kuaishou','xiaohongshu','xigua','weibo','zhihu','tieba','douban','xianyu'].map(function(app) { return 'RULE-SET,acc-fl-' + app + ',' + BIZ.CNMEDIA })
 
-const AD_FALSE_POSITIVE_ALLOWLIST = [
-  // v5.4.2 P0-FIX#41: 小米核心服务 DIRECT 白名单——前置 miuiprivacy/advertisingmitv。
-  // 小米账号认证安全域名（auth.be.sec.miui.com / idm.api.io.mi.com 在 miuiprivacy 中被误杀导致登录"网络错误"）。
-  `DOMAIN-SUFFIX,account.xiaomi.com,DIRECT`,
-  `DOMAIN-SUFFIX,passport.xiaomi.com,DIRECT`,
-  // 小米云服务。
-  `DOMAIN-SUFFIX,micloud.xiaomi.com,DIRECT`,
-  `DOMAIN,i.mi.com,DIRECT`,
-  // 小米系统安全（均在 miuiprivacy 中被误杀）。
-  `DOMAIN,auth.be.sec.miui.com,DIRECT`,
-  `DOMAIN,idm.api.io.mi.com,DIRECT`,
-  `DOMAIN,api.installer.xiaomi.com,DIRECT`,
-  `DOMAIN,flash.sec.miui.com,DIRECT`,
-  `DOMAIN,mazu.sec.miui.com,DIRECT`,
-  `DOMAIN,ccc.sys.miui.com,DIRECT`,
-  // 小米推送注册（register.xmpush.xiaomi.com 在 advertisingmitv 中被误杀）。
-  `DOMAIN,register.xmpush.xiaomi.com,DIRECT`,
-  // v5.4.14 FIX#CF-R2: Sukka reject_phishing 当前包含 Cloudflare R2 存储域；
-  // 必须前置到广告/钓鱼拦截规则之前，否则后面的国外网站规则无法覆盖首匹配。
-  `DOMAIN-SUFFIX,cloudflarestorage.com,${BIZ.INTL_SITE}`,
-  // v5.4.16 FIX#149: anti-AD/DustinWin 当前包含 analytics.paddle.com；
-  // Antigravity 账号设置会调用 Paddle 许可/支付链路，必须前置到广告规则之前。
-  `DOMAIN-SUFFIX,paddle.com,${BIZ.PAYMENTS}`,
-  // v5.4.19 #2 借鉴 Proxy-override：国内推送 SDK 直连前置——jpush(极光推送)/umeng(友盟) 在
-  // jiguangtuisong / youmengchuangxiang 规则集中被当 tracker 拦截，但承载合法 App 推送/消息功能，
-  // 故前置到广告规则之前强制 DIRECT（参照 P0-FIX#41 小米先例）。
-  `DOMAIN-SUFFIX,jpush.cn,DIRECT`,
-  `DOMAIN-SUFFIX,jpush.io,DIRECT`,
-  `DOMAIN,msg.umeng.com,DIRECT`,
-  // v5.4.22 GeTui(个推)推送 SDK 直连——延续 #2：被通用广告/隐私表(category-ads-all/privacy)当 tracker 拦截，但承载 App 推送(米家等)，放行保推送可达。
-  `DOMAIN-SUFFIX,getui.com,DIRECT`,
-  `DOMAIN-SUFFIX,getui.net,DIRECT`,
-  `DOMAIN-SUFFIX,gepush.com,DIRECT`,
-]
+
+
+
+
+
+
+
+
+
+
+
+
+// BEGIN AUTO-GENERATED MIHOMO FUSED RULE-SETS
+// Generated by tools/build-fused-rule-sets.js from rulesets/source/routing-graph.js.
+const MIHOMO_FUSED_RULE_PROVIDERS = {"scki-fused-001-direct-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-001-direct-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-001-direct-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-002-intl-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-002-intl-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-002-intl-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-003-payments-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-003-payments-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-003-payments-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-004-ai-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-004-ai-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-004-ai-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-005-cnmedia-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-005-cnmedia-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-005-cnmedia-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-006-ad-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-006-ad-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-006-ad-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-006-ad-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-006-ad-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-006-ad-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-006-ad-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-007-cn-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-007-cn-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-007-cn-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-008-direct-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-008-direct-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-008-direct-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-008-direct-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-008-direct-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-008-direct-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-008-direct-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-009-work-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-009-work-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-009-work-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-010-crypto-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-010-crypto-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-010-crypto-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-011-gfw-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-011-gfw-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-011-gfw-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-012-youtube-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-012-youtube-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-012-youtube-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-013-cn-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-013-cn-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-013-cn-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-014-ai-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-014-ai-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-014-ai-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-015-google-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-015-google-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-015-google-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-015-google-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-015-google-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-015-google-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-016-work-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-016-work-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-016-work-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-017-ai-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-017-ai-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-017-ai-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-017-ai-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-017-ai-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-017-ai-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-017-ai-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-018-intl-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-018-intl-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-018-intl-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-019-im-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-019-im-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-019-im-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-020-work-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-020-work-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-020-work-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-021-download-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-021-download-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-021-download-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-021-download-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-021-download-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-021-download-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-022-google-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-022-google-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-022-google-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-022-google-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-022-google-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-022-google-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-023-tools-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-023-tools-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-023-tools-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-024-ai-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-024-ai-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-024-ai-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-024-ai-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-024-ai-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-024-ai-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-024-ai-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-025-google-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-025-google-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-025-google-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-026-ai-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-026-ai-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-026-ai-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-026-ai-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-026-ai-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-026-ai-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-026-ai-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-027-crypto-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-027-crypto-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-027-crypto-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-027-crypto-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-027-crypto-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-027-crypto-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-028-payments-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-028-payments-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-028-payments-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-028-payments-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-028-payments-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-028-payments-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-029-microsoft-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-029-microsoft-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-029-microsoft-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-030-intl-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-030-intl-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-030-intl-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-031-direct-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-031-direct-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-031-direct-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-032-im-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-032-im-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-032-im-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-032-im-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-032-im-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-032-im-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-032-im-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-032-im-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-032-im-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-033-social-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-033-social-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-033-social-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-033-social-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-033-social-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-033-social-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-033-social-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-033-social-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-033-social-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-034-cn-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-034-cn-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-034-cn-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-035-social-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-035-social-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-035-social-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-036-work-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-036-work-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-036-work-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-036-work-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-036-work-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-036-work-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-036-work-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-037-direct-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-037-direct-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-037-direct-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-038-cnmedia-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-038-cnmedia-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-038-cnmedia-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-039-tiktok-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-039-tiktok-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-039-tiktok-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-040-youtube-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-040-youtube-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-040-youtube-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-041-netflix-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-041-netflix-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-041-netflix-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-041-netflix-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-041-netflix-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-041-netflix-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-042-disney-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-042-disney-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-042-disney-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-042-disney-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-042-disney-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-042-disney-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-043-hbo-max-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-043-hbo-max-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-043-hbo-max-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-043-hbo-max-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-043-hbo-max-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-043-hbo-max-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-044-hulu-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-044-hulu-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-044-hulu-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-044-hulu-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-044-hulu-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-044-hulu-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-045-prime-video-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-045-prime-video-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-045-prime-video-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-045-prime-video-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-045-prime-video-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-045-prime-video-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-045-prime-video-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-046-music-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-046-music-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-046-music-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-046-music-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-046-music-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-046-music-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-047-stream-hk-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-047-stream-hk-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-047-stream-hk-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-047-stream-hk-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-047-stream-hk-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-047-stream-hk-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-047-stream-hk-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-048-stream-tw-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-048-stream-tw-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-048-stream-tw-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-048-stream-tw-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-048-stream-tw-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-048-stream-tw-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-049-stream-jpkr-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-049-stream-jpkr-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-049-stream-jpkr-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-049-stream-jpkr-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-049-stream-jpkr-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-049-stream-jpkr-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-049-stream-jpkr-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-050-stream-eu-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-050-stream-eu-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-050-stream-eu-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-050-stream-eu-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-050-stream-eu-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-050-stream-eu-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-051-stream-other-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-051-stream-other-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-051-stream-other-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-051-stream-other-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-051-stream-other-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-051-stream-other-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-051-stream-other-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-052-tools-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-052-tools-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-052-tools-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-053-google-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-053-google-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-053-google-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-054-tools-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-054-tools-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-054-tools-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-054-tools-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-054-tools-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-054-tools-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-054-tools-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-055-microsoft-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-055-microsoft-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-055-microsoft-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-055-microsoft-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-055-microsoft-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-055-microsoft-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-056-apple-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-056-apple-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-056-apple-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-056-apple-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-056-apple-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-056-apple-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-056-apple-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-057-download-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-057-download-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-057-download-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-057-download-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-057-download-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-057-download-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-057-download-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-058-tracker-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-058-tracker-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-058-tracker-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-058-tracker-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-058-tracker-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-058-tracker-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-058-tracker-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-059-gfw-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-059-gfw-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-059-gfw-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-059-gfw-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-059-gfw-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-059-gfw-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-059-gfw-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-060-game-cn-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-060-game-cn-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-060-game-cn-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-061-game-intl-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-061-game-intl-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-061-game-intl-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-061-game-intl-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-061-game-intl-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-061-game-intl-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-061-game-intl-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-062-intl-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-062-intl-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-062-intl-site-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-062-intl-site-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-062-intl-site-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-062-intl-site-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-062-intl-site-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-063-payments-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-063-payments-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-063-payments-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-064-cnmedia-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-064-cnmedia-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-064-cnmedia-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-064-cnmedia-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-064-cnmedia-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-064-cnmedia-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-064-cnmedia-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-065-cn-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-065-cn-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-065-cn-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-065-cn-site-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-065-cn-site-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-065-cn-site-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-066-direct-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-066-direct-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-066-direct-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-067-cn-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-067-cn-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-067-cn-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-067-cn-site-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-067-cn-site-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-067-cn-site-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-068-intl-site-domain":{"type":"http","behavior":"domain","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-domain.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-068-intl-site-domain.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-068-intl-site-ipcidr":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-ipcidr.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-068-intl-site-ipcidr.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-068-intl-site-ipcidr-no-resolve":{"type":"http","behavior":"ipcidr","format":"mrs","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-ipcidr-no-resolve.mrs?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-068-intl-site-ipcidr-no-resolve.mrs","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-068-intl-site-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-068-intl-site-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-068-intl-site-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-069-im-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-069-im-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-069-im-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-070-netflix-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-070-netflix-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-070-netflix-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-071-social-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-071-social-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-071-social-residual.yaml","interval":86400,"proxy":"🚫 受限网站"},"scki-fused-072-google-residual":{"type":"http","behavior":"classical","format":"yaml","url":"https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/rulesets/generated/fused/mihomo/scki-fused-072-google-residual.yaml?scki=v6.0.13","path":"./ruleset/v6.0.13/scki-fused-072-google-residual.yaml","interval":86400,"proxy":"🚫 受限网站"}}
+const MIHOMO_FUSED_RULES = ["RULE-SET,scki-fused-001-direct-domain,DIRECT","RULE-SET,scki-fused-002-intl-site-domain,🌐 国外网站","RULE-SET,scki-fused-003-payments-domain,🏦 金融支付","RULE-SET,scki-fused-004-ai-domain,🤖 AI 服务","RULE-SET,scki-fused-005-cnmedia-domain,📺 国内流媒体","RULE-SET,scki-fused-006-ad-domain,🛑 广告拦截","RULE-SET,scki-fused-006-ad-ipcidr,🛑 广告拦截","RULE-SET,scki-fused-006-ad-residual,🛑 广告拦截","RULE-SET,scki-fused-007-cn-site-domain,🏠 国内网站","AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),📹 YouTube","AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),🔍 Google 服务","AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,microsoft)),Ⓜ️ 微软服务","AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,apple)),🍎 苹果服务","AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT","DST-PORT,7680,REJECT","RULE-SET,scki-fused-008-direct-domain,DIRECT","RULE-SET,scki-fused-008-direct-ipcidr-no-resolve,DIRECT,no-resolve","RULE-SET,scki-fused-008-direct-residual,DIRECT","RULE-SET,scki-fused-009-work-residual,🧑‍💼 会议协作","DST-PORT,26880,DIRECT","DST-PORT,6540,DIRECT","DST-PORT,33068,DIRECT","DST-PORT,123,DIRECT","DST-PORT,3478,DIRECT","DST-PORT,3479,DIRECT","DST-PORT,5349,DIRECT","DST-PORT,19302,DIRECT","DST-PORT,19305,DIRECT","DST-PORT,19307,DIRECT","RULE-SET,scki-fused-010-crypto-domain,💰 加密货币","RULE-SET,scki-fused-011-gfw-domain,🚫 受限网站","RULE-SET,scki-fused-012-youtube-domain,📹 YouTube","RULE-SET,scki-fused-013-cn-site-domain,🏠 国内网站","RULE-SET,scki-fused-014-ai-domain,🤖 AI 服务","RULE-SET,scki-fused-015-google-domain,🔍 Google 服务","RULE-SET,scki-fused-015-google-residual,🔍 Google 服务","RULE-SET,scki-fused-016-work-domain,🧑‍💼 会议协作","RULE-SET,scki-fused-017-ai-domain,🤖 AI 服务","RULE-SET,scki-fused-017-ai-ipcidr,🤖 AI 服务","RULE-SET,scki-fused-017-ai-residual,🤖 AI 服务","RULE-SET,scki-fused-018-intl-site-domain,🌐 国外网站","RULE-SET,scki-fused-019-im-domain,💬 即时通讯","RULE-SET,scki-fused-020-work-domain,🧑‍💼 会议协作","RULE-SET,scki-fused-021-download-domain,📥 下载更新","RULE-SET,scki-fused-021-download-ipcidr,📥 下载更新","RULE-SET,scki-fused-022-google-domain,🔍 Google 服务","RULE-SET,scki-fused-022-google-ipcidr-no-resolve,🔍 Google 服务,no-resolve","AND,((PROCESS-NAME,Code Helper),(DOMAIN,api.github.com)),🤖 AI 服务","AND,((PROCESS-NAME,Code Helper (Plugin)),(DOMAIN,api.github.com)),🤖 AI 服务","RULE-SET,scki-fused-023-tools-domain,🔧 工具与服务","RULE-SET,scki-fused-024-ai-domain,🤖 AI 服务","RULE-SET,scki-fused-024-ai-ipcidr-no-resolve,🤖 AI 服务,no-resolve","RULE-SET,scki-fused-024-ai-residual,🤖 AI 服务","RULE-SET,scki-fused-025-google-domain,🔍 Google 服务","RULE-SET,scki-fused-026-ai-domain,🤖 AI 服务","RULE-SET,scki-fused-026-ai-ipcidr-no-resolve,🤖 AI 服务,no-resolve","RULE-SET,scki-fused-026-ai-residual,🤖 AI 服务","RULE-SET,scki-fused-027-crypto-domain,💰 加密货币","RULE-SET,scki-fused-027-crypto-residual,💰 加密货币","RULE-SET,scki-fused-028-payments-domain,🏦 金融支付","RULE-SET,scki-fused-028-payments-residual,🏦 金融支付","RULE-SET,scki-fused-029-microsoft-domain,Ⓜ️ 微软服务","RULE-SET,scki-fused-030-intl-site-domain,🌐 国外网站","RULE-SET,scki-fused-031-direct-domain,DIRECT","RULE-SET,scki-fused-032-im-domain,💬 即时通讯","RULE-SET,scki-fused-032-im-ipcidr,💬 即时通讯","RULE-SET,scki-fused-032-im-ipcidr-no-resolve,💬 即时通讯,no-resolve","RULE-SET,scki-fused-032-im-residual,💬 即时通讯","RULE-SET,scki-fused-033-social-domain,📱 社交媒体","RULE-SET,scki-fused-033-social-ipcidr,📱 社交媒体","RULE-SET,scki-fused-033-social-ipcidr-no-resolve,📱 社交媒体,no-resolve","RULE-SET,scki-fused-033-social-residual,📱 社交媒体","RULE-SET,scki-fused-034-cn-site-domain,🏠 国内网站","RULE-SET,scki-fused-035-social-domain,📱 社交媒体","RULE-SET,scki-fused-036-work-domain,🧑‍💼 会议协作","RULE-SET,scki-fused-036-work-ipcidr,🧑‍💼 会议协作","RULE-SET,scki-fused-036-work-residual,🧑‍💼 会议协作","RULE-SET,scki-fused-037-direct-domain,DIRECT","RULE-SET,scki-fused-038-cnmedia-domain,📺 国内流媒体","RULE-SET,scki-fused-039-tiktok-domain,🎵 TikTok","RULE-SET,scki-fused-040-youtube-domain,📹 YouTube","RULE-SET,scki-fused-041-netflix-domain,🎥 Netflix","RULE-SET,scki-fused-041-netflix-ipcidr-no-resolve,🎥 Netflix,no-resolve","RULE-SET,scki-fused-042-disney-domain,🎬 Disney+","RULE-SET,scki-fused-042-disney-residual,🎬 Disney+","RULE-SET,scki-fused-043-hbo-max-domain,📡 HBO/Max","RULE-SET,scki-fused-043-hbo-max-residual,📡 HBO/Max","RULE-SET,scki-fused-044-hulu-domain,📺 Hulu","RULE-SET,scki-fused-044-hulu-residual,📺 Hulu","RULE-SET,scki-fused-045-prime-video-domain,🎬 Prime Video","RULE-SET,scki-fused-045-prime-video-ipcidr,🎬 Prime Video","RULE-SET,scki-fused-045-prime-video-residual,🎬 Prime Video","RULE-SET,scki-fused-046-music-domain,🎵 音乐流媒体","RULE-SET,scki-fused-046-music-ipcidr,🎵 音乐流媒体","RULE-SET,scki-fused-047-stream-hk-domain,🇭🇰 香港流媒体","RULE-SET,scki-fused-047-stream-hk-ipcidr-no-resolve,🇭🇰 香港流媒体,no-resolve","RULE-SET,scki-fused-047-stream-hk-residual,🇭🇰 香港流媒体","RULE-SET,scki-fused-048-stream-tw-domain,🇹🇼 台湾流媒体","RULE-SET,scki-fused-048-stream-tw-residual,🇹🇼 台湾流媒体","RULE-SET,scki-fused-049-stream-jpkr-domain,🇯🇵 日韩流媒体","RULE-SET,scki-fused-049-stream-jpkr-ipcidr,🇯🇵 日韩流媒体","RULE-SET,scki-fused-049-stream-jpkr-residual,🇯🇵 日韩流媒体","RULE-SET,scki-fused-050-stream-eu-domain,🇪🇺 欧洲流媒体","RULE-SET,scki-fused-050-stream-eu-residual,🇪🇺 欧洲流媒体","RULE-SET,scki-fused-051-stream-other-domain,🌐 其他国外流媒体","RULE-SET,scki-fused-051-stream-other-ipcidr,🌐 其他国外流媒体","RULE-SET,scki-fused-051-stream-other-residual,🌐 其他国外流媒体","RULE-SET,scki-fused-052-tools-domain,🔧 工具与服务","RULE-SET,scki-fused-053-google-domain,🔍 Google 服务","RULE-SET,scki-fused-054-tools-domain,🔧 工具与服务","RULE-SET,scki-fused-054-tools-ipcidr,🔧 工具与服务","RULE-SET,scki-fused-054-tools-residual,🔧 工具与服务","RULE-SET,scki-fused-055-microsoft-domain,Ⓜ️ 微软服务","RULE-SET,scki-fused-055-microsoft-residual,Ⓜ️ 微软服务","RULE-SET,scki-fused-056-apple-domain,🍎 苹果服务","RULE-SET,scki-fused-056-apple-ipcidr,🍎 苹果服务","RULE-SET,scki-fused-056-apple-residual,🍎 苹果服务","RULE-SET,scki-fused-057-download-domain,📥 下载更新","RULE-SET,scki-fused-057-download-ipcidr,📥 下载更新","RULE-SET,scki-fused-057-download-residual,📥 下载更新","RULE-SET,scki-fused-058-tracker-domain,🛰️ BT/PT Tracker","RULE-SET,scki-fused-058-tracker-ipcidr,🛰️ BT/PT Tracker","RULE-SET,scki-fused-058-tracker-residual,🛰️ BT/PT Tracker","RULE-SET,scki-fused-059-gfw-domain,🚫 受限网站","RULE-SET,scki-fused-059-gfw-ipcidr-no-resolve,🚫 受限网站,no-resolve","RULE-SET,scki-fused-059-gfw-residual,🚫 受限网站","RULE-SET,scki-fused-060-game-cn-domain,🕹️ 国内游戏","RULE-SET,scki-fused-061-game-intl-domain,🎮 国外游戏","RULE-SET,scki-fused-061-game-intl-ipcidr,🎮 国外游戏","RULE-SET,scki-fused-061-game-intl-residual,🎮 国外游戏","RULE-SET,scki-fused-062-intl-site-domain,🌐 国外网站","RULE-SET,scki-fused-062-intl-site-ipcidr,🌐 国外网站","RULE-SET,scki-fused-062-intl-site-residual,🌐 国外网站","RULE-SET,scki-fused-063-payments-domain,🏦 金融支付","RULE-SET,scki-fused-064-cnmedia-domain,📺 国内流媒体","RULE-SET,scki-fused-064-cnmedia-ipcidr,📺 国内流媒体","RULE-SET,scki-fused-064-cnmedia-residual,📺 国内流媒体","RULE-SET,scki-fused-065-cn-site-domain,🏠 国内网站","RULE-SET,scki-fused-065-cn-site-ipcidr-no-resolve,🏠 国内网站,no-resolve","RULE-SET,scki-fused-066-direct-domain,DIRECT","RULE-SET,scki-fused-067-cn-site-domain,🏠 国内网站","RULE-SET,scki-fused-067-cn-site-residual,🏠 国内网站","RULE-SET,scki-fused-068-intl-site-domain,🌐 国外网站","RULE-SET,scki-fused-068-intl-site-ipcidr,🌐 国外网站","RULE-SET,scki-fused-068-intl-site-ipcidr-no-resolve,🌐 国外网站,no-resolve","RULE-SET,scki-fused-068-intl-site-residual,🌐 国外网站","RULE-SET,scki-fused-069-im-residual,💬 即时通讯","RULE-SET,scki-fused-070-netflix-residual,🎥 Netflix","RULE-SET,scki-fused-071-social-residual,📱 社交媒体","RULE-SET,scki-fused-072-google-residual,🔍 Google 服务","MATCH,🐟 漏网之鱼"]
+
+function applyMihomoFusedRuleSets(config) {
+  if (typeof SCKI_DISABLE_FUSED_RULESETS !== 'undefined' && SCKI_DISABLE_FUSED_RULESETS) return
+  var providers = config['rule-providers'] || {}
+  Object.keys(providers).forEach(function(key) { delete providers[key] })
+  Object.keys(MIHOMO_FUSED_RULE_PROVIDERS).forEach(function(key) { providers[key] = MIHOMO_FUSED_RULE_PROVIDERS[key] })
+  config['rule-providers'] = providers
+  if (Array.isArray(config.rules)) {
+    config.rules.splice.apply(config.rules, [0, config.rules.length].concat(MIHOMO_FUSED_RULES))
+  } else {
+    config.rules = MIHOMO_FUSED_RULES.slice()
+  }
+}
+// END AUTO-GENERATED MIHOMO FUSED RULE-SETS
 
 const REGION_ORDER = ['GLOBAL', 'HK', 'TW', 'SG', 'JPKR', 'APAC', 'US', 'EU', 'AMERICAS', 'AFRICA', 'OTHER']
 const REGION_HOME_MAP = {
@@ -369,31 +310,19 @@ function buildSeaProxies() {
   return withResidential(['SG', 'APAC', 'GLOBAL', 'HK', 'JPKR', 'US']).concat('DIRECT')
 }
 
-// v5.1.2: GeoRouting 区域列表（module-level，供 providers + rules 共用）
-// ★ FIX#1: Asia_China 从 INTL 循环剥离，单独映射 CN_SITE（v5.1.1 误将中国域名/IP 路由到国外网站）
-const GEO_REGIONS_ALL = [
-  'Asia_East', 'Asia_EastSouth', 'Asia_South', 'Asia_Central', 'Asia_West',
-  'Asia_China',
-  'America_North', 'America_South',
-  'Europe_West', 'Europe_East',
-  'Oceania', 'Antarctica',
-  'Africa_North', 'Africa_South', 'Africa_West', 'Africa_East', 'Africa_Central'
-]
-const GEO_REGIONS_INTL = GEO_REGIONS_ALL.filter(r => r !== 'Asia_China')
-
 // ================================================================
 //  模块 E：区域组创建（url-test，非 Smart 内核等价写法）
 // ================================================================
 
 function upsertUrlTestGroup(config, name, proxies) {
-  var group = { name: name, type: 'url-test', url: 'https://www.gstatic.com/generate_204', interval: 180, tolerance: 10, lazy: false, proxies: proxies.slice() }
+  var group = { name: name, type: 'url-test', url: 'https://www.gstatic.com/generate_204', interval: 300, tolerance: 10, lazy: false, proxies: proxies.slice() }
   var idx = config['proxy-groups'].findIndex(function(g) { return g && g.name === name })
   if (idx !== -1) { config['proxy-groups'][idx] = group } else { config['proxy-groups'].push(group) }
   log(`[${VERSION}] url-test: "${name}" -> ${proxies.length} nodes`)
 }
 
 // ================================================================
-//  模块 F：业务策略组注入（28组）
+//  模块 F：业务策略组注入（33组）
 // ================================================================
 
 function injectBusinessGroups(config, activeSmartNames) {
@@ -434,6 +363,7 @@ function injectBusinessGroups(config, activeSmartNames) {
     { name: BIZ.STREAM_OTHER, type: 'select', proxies: standardProxies.slice() },
     { name: BIZ.GAME_CN, type: 'select', proxies: directFirstProxies.slice() },
     { name: BIZ.GAME_INTL, type: 'select', proxies: standardProxies.slice() },
+    { name: BIZ.GOOGLE, type: 'select', proxies: standardProxies.slice() },
     { name: BIZ.TOOLS, type: 'select', proxies: standardProxies.slice() },
     { name: BIZ.MS, type: 'select', proxies: standardProxies.slice() },
     { name: BIZ.APPLE, type: 'select', proxies: directFirstProxies.slice() },
@@ -457,1889 +387,625 @@ function injectBusinessGroups(config, activeSmartNames) {
 }
 
 // ================================================================
-//  模块 G：rule-providers 注入（v5.0: 326 providers）
-// ================================================================
-
-function injectRuleProviders(config) {
-  if (!config['rule-providers']) config['rule-providers'] = {}
-
-  // v5.1.6 P0-FIX#2: CDN 切换（raw.githubusercontent.com → fastly.jsdelivr.net）消除启动 EOF 风暴
-  const META = 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo'
-  // v5.1.8 PERF#2: BM7 常量移至下方 CDN 混合策略区块（BM7_FASTLY + BM7_CF）
-  const ACC  = 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main'
-
-  // v5.1.6 P0-FIX#1: 所有 rule-providers 走代理下载，避免 DIRECT 在墙内环境拉取失败
-  // v5.2.1 FIX: jsdelivr 和 rule-provider 下载走受限网站组（中国用代理，印尼用直连）
-  const RP_PROXY = BIZ.GFW
-
-  const RP_BASE = 85500
-  const RP_STEP = 15
-  let _rpIdx = 0
-  // v5.1.8 PERF#2: 随机抖动 0~59s 打破整齐步长的周期性并发浪峰
-  const nextInterval = () => RP_BASE + ((_rpIdx++) * RP_STEP) + Math.floor(Math.random() * 60)
-
-  // v5.1.8 PERF#2: bm7 CDN 混合策略（奇偶轮替 Fastly / Cloudflare，分散 EOF 风暴）
-  const BM7_FASTLY = 'https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash'
-  const BM7_CF     = 'https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash'
-  let _bm7Idx = 0
-
-  const metaDomain = (id, name) => {
-    config['rule-providers'][id] = { type: 'http', behavior: 'domain', format: 'mrs', url: `${META}/geosite/${name}.mrs`, path: `./ruleset/meta-${name}.mrs`, interval: nextInterval(), proxy: RP_PROXY }
-  }
-  const metaIpCidr = (id, name) => {
-    config['rule-providers'][id] = { type: 'http', behavior: 'ipcidr', format: 'mrs', url: `${META}/geoip/${name}.mrs`, path: `./ruleset/meta-ip-${name}.mrs`, interval: nextInterval(), proxy: RP_PROXY }
-  }
-  const bm7 = (id, name) => {
-    const cdn = ((_bm7Idx++) % 2 === 0) ? BM7_FASTLY : BM7_CF
-    config['rule-providers'][id] = { type: 'http', behavior: 'classical', url: `${cdn}/${name}/${name}.yaml`, path: `./ruleset/bm7-${name}.yaml`, interval: nextInterval(), proxy: RP_PROXY }
-  }
-  const bm7Custom = (id, dir, file) => {
-    const cdn = ((_bm7Idx++) % 2 === 0) ? BM7_FASTLY : BM7_CF
-    config['rule-providers'][id] = { type: 'http', behavior: 'classical', url: `${cdn}/${dir}/${file}.yaml`, path: `./ruleset/bm7-${id}.yaml`, interval: nextInterval(), proxy: RP_PROXY }
-  }
-
-  // ============ #1 广告拦截 ============
-  // v5.1.7 PERF: anti-ad → DustinWin ads.mrs（同源 privacy-protection-tools/anti-AD，domain behavior + mrs format）
-  // 备选方案（若 DustinWin .mrs 源不可用，取消下方注释并注释掉 mrs 版本）：
-  //   config['rule-providers']['anti-ad'] = { type: 'http', behavior: 'domain', url: 'https://anti-ad.net/clash.yaml', path: './ruleset/anti-ad.yaml', interval: nextInterval(), proxy: RP_PROXY }
-  config['rule-providers']['anti-ad'] = { type: 'http', behavior: 'domain', format: 'mrs', url: 'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@mihomo-ruleset/ads.mrs', path: './ruleset/anti-ad.mrs', interval: nextInterval(), proxy: RP_PROXY }
-
-  // ============ #2~5 AI 服务 ============
-  metaDomain('openai', 'openai')
-  bm7('claude',  'Claude')
-  bm7('gemini',  'Gemini')
-  bm7('copilot', 'Copilot')
-
-  // ============ #6 加密货币 ============
-  bm7('cryptocurrency', 'Cryptocurrency')
-
-  // ============ #7~12 即时通讯 ============
-  metaDomain('telegram', 'telegram')
-  metaIpCidr('telegram-ip', 'telegram')
-  bm7('discord', 'Discord')
-  bm7('line', 'Line')
-  bm7('whatsapp', 'Whatsapp')
-  bm7('kakaotalk', 'KakaoTalk')
-
-  // ============ #13~22 社交媒体 ============
-  metaDomain('twitter', 'twitter')
-  metaIpCidr('twitter-ip', 'twitter')
-  metaDomain('tiktok', 'tiktok')
-  bm7('reddit', 'Reddit')
-  bm7('facebook', 'Facebook')
-  bm7('instagram', 'Instagram')
-  // v5.2.3 FIX: Snap 规则改用 Meta geosite（兼容 mihomo，不再触发 USER-AGENT,TikTok* 解析警告）
-  // bm7 Apple 相关 provider 含格式错误 IP-CIDR（多余空格），每次 reload 产生 warning，不影响功能
-  // v5.2.4 FIX#22-P0: MetaCubeX geosite 的实际文件名是 `snap.mrs` 不是 `snapchat.mrs`，
-  //   之前 metaDomain('snapchat','snapchat') 会产生 [Provider] snapchat pull error: 403 Forbidden
-  metaDomain('snapchat', 'snap')
-  bm7('pinterest', 'Pinterest')
-  bm7('linkedin', 'LinkedIn')
-  metaIpCidr('facebook-ip', 'facebook')
-
-  // ============ #23~25 会议协作 ============
-  bm7('slack', 'Slack')
-  config['rule-providers']['zoom'] = { type: 'http', behavior: 'classical', url: 'https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Providers/Ruleset/Zoom.yaml', path: './ruleset/acl4ssr-Zoom.yaml', interval: nextInterval(), proxy: RP_PROXY }
-  bm7('teams', 'Teams')
-
-  // ============ #26~29 搜索引擎 ============
-  metaDomain('google', 'google')
-  metaIpCidr('google-ip', 'google')
-  bm7('bing', 'Bing')
-
-  // ============ #30~41 美国流媒体 ============
-  metaDomain('youtube', 'youtube')
-  metaDomain('netflix', 'netflix')
-  metaIpCidr('netflix-ip', 'netflix')
-  metaDomain('spotify', 'spotify')
-  bm7('disney', 'Disney')
-  bm7('hbo', 'HBO')
-  bm7('primevideo', 'PrimeVideo')
-  bm7('hulu', 'Hulu')
-  bm7('paramount', 'ParamountPlus')
-  bm7('amazon', 'Amazon')
-  bm7('peacock', 'Peacock')
-  bm7('twitch', 'Twitch')
-
-  // ============ #42~43 台湾流媒体 ============
-  metaDomain('bahamut', 'bahamut')
-  bm7('kktv', 'KKTV')
-
-  // ============ #44~45 日韩流媒体 ============
-  metaDomain('abema', 'abema')
-  bm7('dazn', 'DAZN')
-
-  // ============ #46 欧洲流媒体 ============
-  // v5.2.3 FIX: BBC 规则改用 Meta geosite（兼容 mihomo，不再触发 USER-AGENT,BBCiPlayer* 解析警告）
-  metaDomain('bbc', 'bbc')
-
-  // ============ #47~53 国外游戏 ============
-  bm7('steam', 'Steam')
-  bm7('epic', 'Epic')
-  bm7('playstation', 'PlayStation')
-  bm7('nintendo', 'Nintendo')
-  bm7('xbox', 'Xbox')
-  bm7('ea', 'EA')
-  bm7('blizzard', 'Blizzard')
-
-  // ============ #54~55 微软服务 ============
-  metaDomain('microsoft', 'microsoft')
-  metaDomain('onedrive', 'onedrive')
-
-  // ============ #56~58 苹果服务 ============
-  metaDomain('apple', 'apple')
-  metaDomain('icloud', 'icloud')
-  bm7('applemusic', 'AppleMusic')
-
-  // ============ #59~61 开发者服务 ============
-  metaDomain('github', 'github')
-  bm7('docker', 'Docker')
-  bm7('gitlab', 'GitLab')
-
-  // ============ #62 金融支付 ============
-  bm7('paypal', 'PayPal')
-
-  // ============ #63~65 云与CDN ============
-  metaIpCidr('cloudflare-ip', 'cloudflare')
-  metaIpCidr('cloudfront-ip', 'cloudfront')
-  metaIpCidr('fastly-ip', 'fastly')
-
-  // ============ #66 下载更新 ============
-  bm7('systemota', 'SystemOTA')
-
-  // ============ #67 东南亚流媒体 ============
-  bm7('viu', 'ViuTV')
-
-  // ============ #68~69 国内流媒体 ============
-  metaDomain('bilibili', 'bilibili')
-  metaDomain('biliintl', 'biliintl')
-
-  // ============ #70~72 国内/国外兜底 ============
-  metaDomain('cn', 'cn')
-  metaIpCidr('cn-ip', 'cn')
-  metaDomain('proxy', 'geolocation-!cn')
-
-    // ============ v5.0 新增 254 providers (bm7) ============
-    bm7('advertising', 'Advertising')
-    bm7('advertisingmitv', 'AdvertisingMiTV')
-    bm7('adobeactivation', 'AdobeActivation')
-    bm7('blockhttpdns', 'BlockHttpDNS')
-    bm7('domob', 'Domob')
-    bm7('hijacking', 'Hijacking')
-    bm7('jiguangtuisong', 'JiGuangTuiSong')
-    bm7('marketing', 'Marketing')
-    bm7('miuiprivacy', 'MIUIPrivacy')
-    bm7('privacy', 'Privacy')
-    bm7('youmengchuangxiang', 'YouMengChuangXiang')
-    bm7('civitai', 'Civitai')
-    bm7('binance', 'Binance')
-    bm7('stripe', 'Stripe')
-    bm7('visa', 'VISA')
-    bm7('tigerfintech', 'TigerFintech')
-    bm7('mail', 'Mail')
-    bm7('mailru', 'Mailru')
-    bm7('protonmail', 'Protonmail')
-    bm7('spark', 'Spark')
-    bm7('telegramnl', 'TelegramNL')
-    bm7('telegramsg', 'TelegramSG')
-    bm7('telegramus', 'TelegramUS')
-    bm7('zalo', 'Zalo')
-    bm7('googlevoice', 'GoogleVoice')
-    bm7('italkbb', 'iTalkBB')
-    bm7('tumblr', 'Tumblr')
-    bm7('clubhouse', 'Clubhouse')
-    bm7('clubhouseip', 'ClubhouseIP')
-    bm7('pixiv', 'Pixiv')
-    bm7('truthsocial', 'TruthSocial')
-    bm7('vk', 'VK')
-    bm7('blued', 'Blued')
-    bm7('disqus', 'Disqus')
-    bm7('imgur', 'Imgur')
-    bm7('pixnet', 'Pixnet')
-    bm7('atlassian', 'Atlassian')
-    bm7('notion', 'Notion')
-    bm7('teamviewer', 'TeamViewer')
-    bm7('zoho', 'Zoho')
-    bm7('salesforce', 'Salesforce')
-    bm7('zendesk', 'Zendesk')
-    bm7('intercom', 'Intercom')
-    bm7('remotedesktop', 'RemoteDesktop')
-    bm7('iqiyi', 'iQIYI')
-    bm7('youku', 'Youku')
-    bm7('tencentvideo', 'TencentVideo')
-    bm7('douyin', 'DouYin')
-    bm7('bytedance', 'ByteDance')
-    bm7('kuaishou', 'KuaiShou')
-    bm7('weibo', 'Weibo')
-    bm7('xiaohongshu', 'XiaoHongShu')
-    bm7('neteasemusic', 'NetEaseMusic')
-    bm7('kugoukuwo', 'KugouKuwo')
-    bm7('sohu', 'Sohu')
-    bm7('acfun', 'AcFun')
-    bm7('douyu', 'Douyu')
-    bm7('huya', 'HuYa')
-    bm7('himalaya', 'Himalaya')
-    bm7('cctv', 'CCTV')
-    bm7('hunantv', 'HunanTV')
-    bm7('pptv', 'PPTV')
-    bm7('funshion', 'Funshion')
-    bm7('letv', 'LeTV')
-    bm7('taihemusic', 'TaiheMusic')
-    bm7('kukemusic', 'KuKeMusic')
-    bm7('hibymusic', 'HibyMusic')
-    bm7('miwu', 'MiWu')
-    bm7('migu', 'Migu')
-    bm7('iptvmainland', 'IPTVMainland')
-    bm7('iptvother', 'IPTVOther')
-    bm7('cibn', 'CIBN')
-    bm7('bestv', 'BesTV')
-    bm7('huashutv', 'HuaShuTV')
-    bm7('smg', 'SMG')
-    bm7('hwtv', 'HWTV')
-    bm7('nivodtv', 'NivodTV')
-    bm7('olevod', 'Olevod')
-    bm7('dandanzan', 'DanDanZan')
-    bm7('dandanplay', 'Dandanplay')
-    bm7('tiantiankankan', 'TianTianKanKan')
-    bm7('yizhibo', 'YiZhiBo')
-    bm7('ku6', 'Ku6')
-    bm7('56', '56')
-    bm7('cetv', 'CETV')
-    bm7('yyets', 'YYeTs')
-    bm7('asianmedia', 'AsianMedia')
-    bm7('iqiyiintl', 'iQIYIIntl')
-    bm7('joox', 'JOOX')
-    bm7('mewatch', 'MeWatch')
-    bm7('viki', 'Viki')
-    bm7('wetv', 'WeTV')
-    bm7('zee', 'Zee')
-    bm7('cbs', 'CBS')
-    bm7('nbc', 'NBC')
-    bm7('pbs', 'PBS')
-    bm7('attwatchtv', 'ATTWatchTV')
-    bm7('fox', 'Fox')
-    bm7('fubotv', 'FuboTV')
-    bm7('sling', 'Sling')
-    bm7('soundcloud', 'SoundCloud')
-    bm7('pandora', 'Pandora')
-    bm7('pandoratv', 'PandoraTV')
-    bm7('tidal', 'TIDAL')
-    bm7('vimeo', 'Vimeo')
-    bm7('dailymotion', 'Dailymotion')
-    bm7('deezer', 'Deezer')
-    bm7('discoveryplus', 'DiscoveryPlus')
-    bm7('overcast', 'Overcast')
-    bm7('americasvoice', 'Americasvoice')
-    bm7('cake', 'Cake')
-    bm7('dood', 'Dood')
-    bm7('ehgallery', 'EHGallery')
-    bm7('lastfm', 'LastFM')
-    bm7('emby', 'Emby')
-    bm7('mytvsuper', 'myTVSUPER')
-    bm7('tvb', 'TVB')
-    bm7('encoretvb', 'EncoreTVB')
-    bm7('nowe', 'NowE')
-    bm7('rthk', 'RTHK')
-    bm7('cabletv', 'CableTV')
-    bm7('moov', 'MOOV')
-    bm7('litv', 'LiTV')
-    bm7('friday', 'friDay')
-    bm7('hamivideo', 'HamiVideo')
-    bm7('linetv', 'LineTV')
-    bm7('vidoltv', 'VidolTV')
-    bm7('taiwangood', 'TaiWanGood')
-    bm7('cht', 'CHT')
-    bm7('dmm', 'DMM')
-    bm7('tver', 'TVer')
-    bm7('niconico', 'Niconico')
-    bm7('rakuten', 'Rakuten')
-    bm7('japonx', 'Japonx')
-    bm7('nikkei', 'Nikkei')
-    bm7('itv', 'ITV')
-    bm7('all4', 'All4')
-    bm7('my5', 'My5')
-    bm7('skygo', 'SkyGO')
-    bm7('britboxuk', 'BritboxUK')
-    bm7('londonreal', 'LondonReal')
-    bm7('qobuz', 'Qobuz')
-    bm7('steamcn', 'SteamCN')
-    bm7('wanmeishijie', 'WanMeiShiJie')
-    bm7('wankahuanju', 'WanKaHuanJu')
-    bm7('majsoul', 'Majsoul')
-    bm7('rockstar', 'Rockstar')
-    bm7('riot', 'Riot')
-    bm7('gog', 'Gog')
-    bm7('supercell', 'Supercell')
-    bm7('garena', 'Garena')
-    bm7('hoyoverse', 'HoYoverse')
-    bm7('ubi', 'UBI')
-    bm7('wildrift', 'WildRift')
-    bm7('sony', 'Sony')
-    bm7('yandex', 'Yandex')
-    bm7('naver', 'Naver')
-    bm7('scholar', 'Scholar')
-    bm7('developer', 'Developer')
-    bm7('python', 'Python')
-    bm7('gitbook', 'GitBook')
-    bm7('jfrog', 'Jfrog')
-    bm7('sublimetext', 'SublimeText')
-    bm7('wordpress', 'Wordpress')
-    bm7('wix', 'WIX')
-    bm7('cisco', 'Cisco')
-    bm7('ibm', 'IBM')
-    bm7('oracle', 'Oracle')
-    bm7('unity', 'Unity')
-    bm7('microsoftedge', 'MicrosoftEdge')
-    bm7('appstore', 'AppStore')
-    bm7('appletv', 'AppleTV')
-    bm7('applenews', 'AppleNews')
-    bm7('appledev', 'AppleDev')
-    bm7('appleproxy', 'AppleProxy')
-    bm7('siri', 'Siri')
-    bm7('testflight', 'TestFlight')
-    bm7('applefirmware', 'AppleFirmware')
-    bm7('findmy', 'FindMy')
-    bm7('download', 'Download')
-    bm7('ubuntu', 'Ubuntu')
-    bm7('mozilla', 'Mozilla')
-    bm7('apkpure', 'Apkpure')
-    bm7('android', 'Android')
-    bm7('googlefcm', 'GoogleFCM')
-    bm7('intel', 'Intel')
-    bm7('nvidia', 'Nvidia')
-    bm7('dell', 'Dell')
-    bm7('hp', 'HP')
-    bm7('canon', 'Canon')
-    bm7('lg', 'LG')
-    bm7('cloudflare', 'Cloudflare')
-    bm7('akamai', 'Akamai')
-    // v5.1.2 FIX#6: 删除 bm7 DNS provider（混合中外DNS锁死CLOUD_CDN，改为自然分流）
-    // bm7('dns', 'DNS')  ← REMOVED
-    bm7('digicert', 'DigiCert')
-    bm7('globalsign', 'GlobalSign')
-    bm7('sectigo', 'Sectigo')
-    bm7('brightcove', 'BrightCove')
-    bm7('jwplayer', 'Jwplayer')
-    bm7('privatetracker', 'PrivateTracker')
-    bm7('cnn', 'CNN')
-    bm7('nytimes', 'NYTimes')
-    bm7('bloomberg', 'Bloomberg')
-    bm7('ebay', 'eBay')
-    bm7('nike', 'Nike')
-    bm7('adobe', 'Adobe')
-    bm7('samsung', 'Samsung')
-    bm7('tesla', 'Tesla')
-    bm7('dropbox', 'Dropbox')
-    bm7('mega', 'MEGA')
-    bm7('wikipedia', 'Wikipedia')
-    bm7('duolingo', 'Duolingo')
-
-
-    // ================================================================
-    //  v5.1 Step 1: P0/P2 安全规则 + 量化交易增强
-    // ================================================================
-
-    // ── P0: Ckrvxr/MihomoRules 安全防护 ──
-    // v5.2.1 REMOVED: ckrvxr-antipcdn 和 ckrvxr-antifraud 规则源已下线（持续 404），已删除
-    // P0: SukkaW 13万钓鱼域名拦截（domain behavior + text format）
-    config['rule-providers']['sukka-phishing'] = {
-      type: 'http', behavior: 'domain', format: 'text',
-      url: 'https://ruleset.skk.moe/Clash/domainset/reject_phishing.txt',
-      path: './ruleset/sukka-reject-phishing.txt',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // v5.1.6-P0: Hagezi Threat Intelligence Feeds（威胁情报：malware/cryptojacking/C2/scam/spam）
-    // 优先方案：MiHomoer .mrs 二进制格式（domain behavior，冷启动开销极小）
-    // 备选方案（若 mrs 源不可用，取消下方注释并注释掉 mrs 版本）：
-    //   config['rule-providers']['hagezi-tif'] = {
-    //     type: 'http', behavior: 'domain', format: 'text',
-    //     url: 'https://fastly.jsdelivr.net/gh/hagezi/dns-blocklists@main/domains/tif.medium.txt',
-    //     path: './ruleset/hagezi-tif-medium.txt',
-    //     interval: nextInterval(),
-    //     proxy: RP_PROXY
-    //   }
-    config['rule-providers']['hagezi-tif'] = {
-      type: 'http', behavior: 'domain', format: 'mrs',
-      url: 'https://fastly.jsdelivr.net/gh/MiHomoer/MiHomo-Hagezi@release/HageziUltimate.mrs',
-      path: './ruleset/hagezi-tif.mrs',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ================================================================
-    //  v5.1 Step 3: szkane/ClashRuleSet 全量补充
-    // ================================================================
-
-    // ── szkane AI 服务（OpenAI/Claude/Grok/Perplexity/Gemini 合并）──
-    config['rule-providers']['szkane-ai'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/AiDomain.list',
-      path: './ruleset/szkane-AiDomain.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane CiciAI（字节海外AI：Coze International/Luma AI，需新加坡节点）──
-    // v5.2.7 FIX#27-P1: upstream `Clash/Ruleset/CiciAi.list` 含 `USER-AGENT,TikTok*`，mihomo
-    //   classical provider 不识别 USER-AGENT 会触发 `parse classical rule [USER-AGENT,TikTok*]
-    //   error: unsupported rule type: USER-AGENT`。改用本仓库 mirrors/ 的清洗副本（仅删该行，
-    //   TikTok 域名已由 metaDomain('tiktok','tiktok') 覆盖）。
-    config['rule-providers']['szkane-ciciai'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/CiciAi.list',
-      path: './ruleset/szkane-CiciAi.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane Web3（DeFi/NFT/区块链RPC/交易所）★量化交易核心 ──
-    config['rule-providers']['szkane-web3'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Web3.list',
-      path: './ruleset/szkane-Web3.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane Developer（Docker镜像/HuggingFace模型/开发者下载）──
-    config['rule-providers']['szkane-developer'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Developer.list',
-      path: './ruleset/szkane-Developer.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane Education（Khan Academy）──
-    config['rule-providers']['szkane-khan'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Khan.list',
-      path: './ruleset/szkane-Khan.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane Education（Coursera/edX/Udacity等）──
-    config['rule-providers']['szkane-edutools'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/Edutools.list',
-      path: './ruleset/szkane-Edutools.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane UK Apps ──
-    // v5.2.7 FIX#27-P1: upstream `Clash/Ruleset/UK.list` 含 `USER-AGENT,BBCiPlayer*`，
-    //   mihomo classical provider 不识别 USER-AGENT 会触发
-    //   `parse classical rule [USER-AGENT,BBCiPlayer*] error: unsupported rule type: USER-AGENT`。
-    //   改用本仓库 mirrors/ 的清洗副本（BBC 域名已由 metaDomain('bbc','bbc') 覆盖）。
-    config['rule-providers']['szkane-uk'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/UK.list',
-      path: './ruleset/szkane-UK.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane BilibiliHMT（港澳台哔哩哔哩）──
-    config['rule-providers']['szkane-bilihmt'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/BilibiliHMT.list',
-      path: './ruleset/szkane-BilibiliHMT.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane Netflix IP 段 ──
-    config['rule-providers']['szkane-netflixip'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/Ruleset/NetflixIP.list',
-      path: './ruleset/szkane-NetflixIP.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // ── szkane ProxyGFWlist（GFW域名补充）──
-    config['rule-providers']['szkane-proxygfw'] = {
-      type: 'http', behavior: 'classical', format: 'text',
-      url: 'https://fastly.jsdelivr.net/gh/szkane/ClashRuleSet@main/Clash/ProxyGFWlist.list',
-      path: './ruleset/szkane-ProxyGFWlist.list',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ================================================================
-    //  v5.1.4: Loyalsoldier/clash-rules GFW 封锁域名规则集
-    //  ★ 中国 GFW 领域最权威的 Clash 格式规则源（⭐3.6k）
-    //  上游数据链：
-    //    gfwlist/gfwlist（⭐11k，GFW 封锁域名原始列表）
-    //    + v2fly/domain-list-community（⭐7.1k，V2Ray 社区域名分类数据库）
-    //    + GreatFire Analyzer（独立封锁探测机构）
-    //    → Loyalsoldier/v2ray-rules-dat（聚合转换）
-    //    → Loyalsoldier/clash-rules（Clash 格式 GitHub Actions 每日北京时间6:30自动构建）
-    //  ❌ 排除 tld-not-cn.txt：包含所有非CN顶级域名(.com/.net/.org)，太宽泛会吞掉几乎所有国外域名
-    // ================================================================
-
-    // ── GFWList 封锁域名（核心列表，~4000+ 域名）──
-    // v5.1.7 PERF: text → MetaCubeX geosite:gfw.mrs（同源 gfwlist → v2fly/domain-list-community）
-    // 备选方案（若 MetaCubeX .mrs 源不可用，取消下方注释并注释掉 mrs 版本）：
-    //   config['rule-providers']['loyalsoldier-gfw'] = {
-    //     type: 'http', behavior: 'domain', format: 'text',
-    //     url: 'https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt',
-    //     path: './ruleset/loyalsoldier-gfw.txt',
-    //     interval: nextInterval(),
-    //     proxy: RP_PROXY
-    //   }
-    metaDomain('loyalsoldier-gfw', 'gfw')
-    // ── GreatFire 封锁域名（独立探测源，与 GFWList 互补）──
-    // v5.1.7 PERF: text → MetaCubeX geosite:greatfire.mrs（同源 GreatFire Analyzer → v2fly）
-    // 备选方案（若 MetaCubeX .mrs 源不可用，取消下方注释并注释掉 mrs 版本）：
-    //   config['rule-providers']['loyalsoldier-greatfire'] = {
-    //     type: 'http', behavior: 'domain', format: 'text',
-    //     url: 'https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/greatfire.txt',
-    //     path: './ruleset/loyalsoldier-greatfire.txt',
-    //     interval: nextInterval(),
-    //     proxy: RP_PROXY
-    //   }
-    metaDomain('loyalsoldier-greatfire', 'greatfire')
-
-    // ================================================================
-    //  v5.1 Step 2: Accademia/Additional_Rule_For_Clash 全量35目录
-    //  ★ 作为 blackmatrix7/ios_rule_script 的补充规则
-    // ================================================================
-
-    // ── AI 服务补充 ──
-    config['rule-providers']['acc-appleai'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/AppleAI/AppleAI.yaml',
-      path: './ruleset/acc-AppleAI.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // v5.2.7 FIX#27-P1: upstream `Grok/Grok.yaml` 含 `IP-CIDR         , 17.253.4.125`
-    //   （多余空格 + 缺 CIDR 掩码）会触发
-    //   `parse classical rule [IP-CIDR , 17.253.4.125] error: payloadRule error`。
-    //   改用本仓库 mirrors/ 的清洗副本（仅删该行 + 规整空格）。
-    config['rule-providers']['acc-grok'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/mirrors/Grok.yaml',
-      path: './ruleset/acc-Grok.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-gemini'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Gemini/Gemini.yaml',
-      path: './ruleset/acc-Gemini.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-copilot'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Copilot/Copilot.yaml',
-      path: './ruleset/acc-Copilot.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 金融服务：Bank × 10国（原 acc-bank 404 → 拆分为子 provider）──
-    for (const cc of ['US', 'UK', 'HK', 'SG', 'JP', 'AU', 'CA', 'DE', 'NL', 'FR']) {
-      config['rule-providers'][`acc-bank-${cc.toLowerCase()}`] = {
-        type: 'http', behavior: 'classical',
-        url: `${ACC}/Bank/Bank${cc}.yaml`,
-        path: `./ruleset/acc-Bank${cc}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-    // ── 金融服务：VirtualFinance × 4（原 acc-virtualfinance 404 → 拆分）──
-    for (const svc of ['Paypal', 'Wise', 'Monzo', 'Revolut']) {
-      config['rule-providers'][`acc-vf-${svc.toLowerCase()}`] = {
-        type: 'http', behavior: 'classical',
-        url: `${ACC}/VirtualFinance/${svc}.yaml`,
-        path: `./ruleset/acc-${svc}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-
-    // ── 苹果补充 ──
-    config['rule-providers']['acc-applenews'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/AppleNews/AppleNews.yaml',
-      path: './ruleset/acc-AppleNews.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-apple'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Apple/Apple.yaml',
-      path: './ruleset/acc-Apple.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 微软补充 ──
-    config['rule-providers']['acc-microsoftapps'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/MicrosoftAPPs/MicrosoftAPPs.yaml',
-      path: './ruleset/acc-MicrosoftAPPs.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 即时通讯 ──
-    config['rule-providers']['acc-signal'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Signal/Signal.yaml',
-      path: './ruleset/acc-Signal.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 远程协作 ──
-    config['rule-providers']['acc-rustdesk'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/RustDesk/RustDesk.yaml',
-      path: './ruleset/acc-RustDesk.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-parsec'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Parsec/Parsec.yaml',
-      path: './ruleset/acc-Parsec.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 国内云盘/流媒体 ──
-    config['rule-providers']['acc-alipan'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Alipan/Alipan.yaml',
-      path: './ruleset/acc-Alipan.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-baidunetdisk'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/BaiduNetDisk/BaiduNetDisk.yaml',
-      path: './ruleset/acc-BaiduNetDisk.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-weiyun'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/WeiYun/WeiYun.yaml',
-      path: './ruleset/acc-WeiYun.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-kwai'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Kwai/Kwai.yaml',
-      path: './ruleset/acc-Kwai.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // v5.1.1: FakeLocation × 10 平台（原 acc-fakelocation 404 → 拆分）
-    for (const app of [
-      'BiliBili', 'DouYin', 'KuaiShou', 'XiaoHongShu', 'XiGua',
-      'WeiBo', 'ZhiHu', 'TieBa', 'DouBan', 'XianYu'
-    ]) {
-      config['rule-providers'][`acc-fl-${app.toLowerCase()}`] = {
-        type: 'http', behavior: 'classical',
-        url: `${ACC}/FakeLocation/FakeLocation${app}.yaml`,
-        path: `./ruleset/acc-FakeLocation${app}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-
-    // ── 广告/安全/隐私 ──
-    config['rule-providers']['acc-hijackingplus'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/HijackingPlus/HijackingPlus.yaml',
-      path: './ruleset/acc-HijackingPlus.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-blockhttpdnsplus'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/BlockHttpDNSPlus/BlockHttpDNSPlus.yaml',
-      path: './ruleset/acc-BlockHttpDNSPlus.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-prerepaireasyprivacy'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/PreRepairEasyPrivacy/PreRepairEasyPrivacy.yaml',
-      path: './ruleset/acc-PreRepairEasyPrivacy.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-unsupportvpn'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/UnsupportVPN/UnsupportVPN.yaml',
-      path: './ruleset/acc-UnsupportVPN.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── 下载更新 ──
-    config['rule-providers']['acc-macappupgrade'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/MacAppUpgrade/MacAppUpgrade.yaml',
-      path: './ruleset/acc-MacAppUpgrade.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── CDN/DNS ──
-    config['rule-providers']['acc-fastly'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Fastly/Fastly.yaml',
-      path: './ruleset/acc-Fastly.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // v5.1.2 FIX#6: 删除 acc-globaldns provider（国外DNS由各服务商规则自然分流）
-    // acc-globaldns  ← REMOVED
-    // v5.1.2 FIX#6: 删除 acc-chinadns provider（中国DNS由CN兜底规则自然分流到直连）
-    // acc-chinadns  ← REMOVED
-    // v5.2.5 FIX#23-P1: acc-geositecn + acc-china 删除
-    //   这两个是 geosite:cn (metaDomain('cn', 'cn') 已提供) 的纯重复，
-    //   保留 acc-chinamax 作为 ChinaMax 独立补充覆盖
-
-    // ── 国内兜底补充 ──
-    config['rule-providers']['acc-chinamax'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/ChinaMax/ChinaMax.yaml',
-      path: './ruleset/acc-ChinaMax.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    // v5.1.1: HomeIP × 2国（原 acc-homeip 404 → 拆分）
-    for (const cc of ['US', 'JP']) {
-      config['rule-providers'][`acc-homeip-${cc.toLowerCase()}`] = {
-        type: 'http', behavior: 'classical',
-        url: `${ACC}/HomeIP/HomeIP${cc}.yaml`,
-        path: `./ruleset/acc-HomeIP${cc}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-
-    // ── 国外网站 ──
-    config['rule-providers']['acc-waybackmachine'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/WaybackMachine/WaybackMachine.yaml',
-      path: './ruleset/acc-WaybackMachine.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-pornhub'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/Pornhub/Pornhub.yaml',
-      path: './ruleset/acc-Pornhub.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── IoT：Aqara × 2（原 acc-aqara 404 → 拆分国内/国际）──
-    config['rule-providers']['acc-aqara-cn'] = {
-      type: 'http', behavior: 'classical',
-      url: `${ACC}/Aqara/AqaraCN.yaml`,
-      path: './ruleset/acc-AqaraCN.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-    config['rule-providers']['acc-aqara-global'] = {
-      type: 'http', behavior: 'classical',
-      url: `${ACC}/Aqara/AqaraGlobal.yaml`,
-      path: './ruleset/acc-AqaraGlobal.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── P2P/Tracker ──
-    config['rule-providers']['acc-emuleserver'] = {
-      type: 'http', behavior: 'classical',
-      url: 'https://fastly.jsdelivr.net/gh/Accademia/Additional_Rule_For_Clash@main/eMuleServer/eMuleServer.yaml',
-      path: './ruleset/acc-eMuleServer.yaml',
-      interval: nextInterval(),
-      proxy: RP_PROXY
-    }
-
-    // ── GeoRouting Domain × 17 区域（原 acc-georouting-domain 404 → 按区域拆分，Domain版=作者推荐🔥）──
-    for (const region of GEO_REGIONS_ALL) {
-      const slug = region.toLowerCase().replace(/_/g, '-')
-      config['rule-providers'][`acc-geo-d-${slug}`] = {
-        type: 'http', behavior: 'domain',
-        url: `${ACC}/GeoRouting_For_Domain/GeoRouting_${region}_ccTLD_Domain.yaml`,
-        path: `./ruleset/acc-GeoD-${region}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-    // ── GeoRouting IP × 17 区域（原 acc-georouting-ip 404 → 按区域拆分）──
-    for (const region of GEO_REGIONS_ALL) {
-      const slug = region.toLowerCase().replace(/_/g, '-')
-      config['rule-providers'][`acc-geo-ip-${slug}`] = {
-        type: 'http', behavior: 'classical',
-        url: `${ACC}/GeoRouting_For_IP/GeoRouting_${region}_GeoIP.yaml`,
-        path: `./ruleset/acc-GeoIP-${region}.yaml`,
-        interval: nextInterval(),
-        proxy: RP_PROXY
-      }
-    }
-
-  const count = Object.keys(config['rule-providers']).length
-  log(`[${VERSION}] Injected ${count} rule-providers (base=${RP_BASE}s step=${RP_STEP}s spread=${_rpIdx * RP_STEP}s/${(_rpIdx * RP_STEP / 60).toFixed(1)}min)`)
+// >>> SCKI NODE DNS HINTS: BEGIN — generated from tools/runtime/subscription-adapter-profiles.json + tools/runtime/node-dns-hints.js; edit the runtime Module, then run this synchronizer.
+// Generated from tools/runtime/subscription-adapter-profiles.json; do not edit in adapters.
+var SCKI_SUBSCRIPTION_ADAPTER_PROFILE_DEFAULT = "adaptive"
+var SCKI_SUBSCRIPTION_ADAPTER_PROFILES = {
+  "off": { id: "off", nodeDnsProjection: "off" },
+  "policy": { id: "policy", nodeDnsProjection: "policy" },
+  "adaptive": { id: "adaptive", nodeDnsProjection: "adaptive" }
+}
+function sckiResolveSubscriptionAdapterProfile(requestedProfile) {
+  var requested = typeof requestedProfile === 'string' ? requestedProfile : ''
+  var selected = SCKI_SUBSCRIPTION_ADAPTER_PROFILES[requested] || SCKI_SUBSCRIPTION_ADAPTER_PROFILES[SCKI_SUBSCRIPTION_ADAPTER_PROFILE_DEFAULT]
+  return { id: selected.id, nodeDnsProjection: selected.nodeDnsProjection }
 }
 
-// ================================================================
-//  模块 H：规则注入
-// ================================================================
+// Subscription Adapter Module — embedded verbatim into runtime JS adapters.
+//
+// Interface:
+//   captureNodeDns(sourceConfig, activeNodeServers, runtimeProfile) -> snapshot
+//   applyNodeDns(repositoryConfig, snapshot, runtimeProfile) -> redacted report
+//
+// Trust boundary: source subscription DNS can only be projected to active proxy
+// node FQDNs. It never replaces the repository-owned global DNS roles.
+// The generated profile fragment supplies sckiResolveSubscriptionAdapterProfile.
 
-function injectRules(config) {
-  var _newRules = [
-    // Anti-ad false-positive allowlist: keep before all ad/phishing/TIF providers.
-    // See docs/GEOSITE_COVERAGE_LEDGER.md for ownership and update rules.
-    ...AD_FALSE_POSITIVE_ALLOWLIST,
-    `RULE-SET,anti-ad,${BIZ.AD}`,
-    // v5.1: P0 安全 - 钓鱼域名拦截（13万条，SukkaW）
-    `RULE-SET,sukka-phishing,${BIZ.AD}`,
-    // v5.1.6: P0 安全 - 威胁情报（Hagezi TIF：malware/cryptojacking/C2/scam/spam）
-    `RULE-SET,hagezi-tif,${BIZ.AD}`,
-    // v5.2.1 REMOVED: ckrvxr-antifraud 和 ckrvxr-antipcdn 规则源已下线
-    // v5.1: Accademia 安全补充
-    `RULE-SET,acc-hijackingplus,${BIZ.AD}`,
-    `RULE-SET,acc-blockhttpdnsplus,${BIZ.AD}`,
-    `RULE-SET,acc-prerepaireasyprivacy,${BIZ.AD}`,
-    `RULE-SET,acc-unsupportvpn,${BIZ.AD}`,
-    `GEOSITE,category-ads-all,${BIZ.AD}`,
-    `RULE-SET,advertising,${BIZ.AD}`,
-    `RULE-SET,advertisingmitv,${BIZ.AD}`,
-    `RULE-SET,adobeactivation,${BIZ.AD}`,
-    `RULE-SET,blockhttpdns,${BIZ.AD}`,
-    `RULE-SET,domob,${BIZ.AD}`,
-    `RULE-SET,hijacking,${BIZ.AD}`,
-    `RULE-SET,jiguangtuisong,${BIZ.AD}`,
-    `RULE-SET,marketing,${BIZ.AD}`,
-    `RULE-SET,miuiprivacy,${BIZ.AD}`,
-    `RULE-SET,privacy,${BIZ.AD}`,
-    `RULE-SET,youmengchuangxiang,${BIZ.AD}`,
-    // v5.4.22 #1 借鉴 Proxy-override：QUIC 精细化——YouTube/Google/MS/Apple 白名单豁免，其余海外 QUIC REJECT
-    "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,youtube)),📹 YouTube",
-    "AND,((DST-PORT,443),(NETWORK,UDP),(GEOSITE,google)),🔧 工具与服务",
-    "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,microsoft)),Ⓜ️ 微软服务",
-    "AND,((DST-PORT,443),(NETWORK,UDP),(RULE-SET,apple)),🍎 苹果服务",
-    "AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((GEOSITE,cn)))),REJECT",
-    // v5.2.1 FIX#19: DST-PORT,7680 必须在 GEOIP,private 之前，否则私有 IP 先匹配走 DIRECT
-    'DST-PORT,7680,REJECT',
-    'GEOSITE,private,DIRECT',
-    'GEOIP,private,DIRECT,no-resolve',
-    'IP-CIDR,172.90.1.130/32,DIRECT,no-resolve',
-    'PROCESS-NAME,WorkPro.exe,DIRECT',
-    'PROCESS-NAME,GCUService.exe,DIRECT',
-    'PROCESS-NAME,GCUBridge.exe,DIRECT',
-    'PROCESS-NAME,CCUWinUI.exe,DIRECT',
-    'PROCESS-NAME,HipsDaemon.exe,DIRECT',
-    'PROCESS-NAME,gdphost.exe,DIRECT',
-    'PROCESS-NAME,gehsender.exe,DIRECT',
-    'PROCESS-NAME,GSCService.exe,DIRECT',
-    // v5.1.8 FIX#12-P1: GSCService.exe 每 2h 访问 ip.cip.cc 做外部 IP 检测，TUN 下 DNS 解析失败
-    // 日志：dial DIRECT (match ProcessName/GSCService.exe) --> ip.cip.cc:80 error: dns resolve failed
-    'DOMAIN,ip.cip.cc,DIRECT',
-    'PROCESS-NAME,gsupservice.exe,DIRECT',
-    'PROCESS-NAME,gchsvc.exe,DIRECT',
-    'PROCESS-NAME,Weixin.exe,DIRECT',
-    'PROCESS-NAME,WeChatAppEx.exe,DIRECT',
-    'PROCESS-NAME,QQ.exe,DIRECT',
-    'PROCESS-NAME,WeChat.exe,DIRECT',
-    // v5.4.11 FIX#RD-PROC: RustDesk public relay/API must not be forced DIRECT;
-    // private/LAN destinations already hit GEOSITE/GEOIP private above.
-    ...RUSTDESK_WORK_PROCESS_NAMES.map(name => `PROCESS-NAME,${name},${BIZ.WORK}`),
-    ...LOCAL_TOOL_DIRECT_PROCESS_NAMES.map(name => `PROCESS-NAME,${name},DIRECT`),
-    'DST-PORT,26880,DIRECT',
-    'DST-PORT,6540,DIRECT',
-    'DST-PORT,33068,DIRECT',
-    'DST-PORT,123,DIRECT',
-    // v5.4.13 FIX#STUN-REALIP: keep standard STUN/TURN discovery on DIRECT.
-    // UDP/443 TURN remains governed by the QUIC policy above.
-    'DST-PORT,3478,DIRECT',
-    'DST-PORT,3479,DIRECT',
-    'DST-PORT,5349,DIRECT',
-    'DST-PORT,19302,DIRECT',
-    'DST-PORT,19305,DIRECT',
-    'DST-PORT,19307,DIRECT',
-    'DOMAIN-SUFFIX,chiphell.com,DIRECT',
-    'DOMAIN-SUFFIX,iwipwedabay.com,DIRECT',
-    'DOMAIN-SUFFIX,cdn.weixin.qq.com,DIRECT',
-    // v5.2.0 CLEAN#2: Binance 精确 DOMAIN 规则已清理（全部被同组 DOMAIN-SUFFIX 覆盖）
-    // 保留 fake-ip-filter 中的精确域名（DNS 层独立于规则层，不受影响）
-    `DOMAIN-SUFFIX,binance.vision,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,binance.info,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,binance.org,${BIZ.CRYPTO}`,
-    // v5.1.8 FIX#11-P0: dns.google 是 DoH 服务，前置拦截防止 szkane-ai 宽规则吞入 AI 组
-    // v5.2.10 FIX#39: 由 ☁️ 云与CDN 改路由到 🚫 受限网站——dns.google 在境内被封，
-    //                 若用户把 CDN 组误设直连，DoH 必失败；放在 GFW 组语义更准确
-    `DOMAIN,dns.google,${BIZ.GFW}`,
-    `DOMAIN,dns.google.com,${BIZ.GFW}`,
-    // v5.1.8 FIX#14-P0: YouTube/googlevideo 被 szkane-ai 宽规则吞入 AI 组
-    // szkane AiDomain.list 含 Google 宽域名（因 Gemini），导致 YouTube 全系误走 AI 代理
-    // 日志：[TCP] dial 🤖 AI 服务 (match RuleSet/szkane-ai) --> www.youtube.com / yt3.ggpht.com / googlevideo.com
-    // 前置精准拦截到 STREAM_US，优先于 RULE-SET,szkane-ai 生效
-    `DOMAIN-SUFFIX,youtube.com,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,youtu.be,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,googlevideo.com,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,ytimg.com,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,ggpht.com,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,youtube-nocookie.com,${BIZ.YT}`,
-    `DOMAIN-SUFFIX,youtubekids.com,${BIZ.YT}`,
-    `RULE-SET,openai,${BIZ.AI}`,
-    `RULE-SET,claude,${BIZ.AI}`,
-    `RULE-SET,gemini,${BIZ.AI}`,
-    // v5.4.10 FIX#RD-COPILOT: Copilot.list contains IP-ASN 20473 (Vultr);
-    // RustDesk public relay nodes such as rs-ny.rustdesk.com can resolve there.
-    `DOMAIN-SUFFIX,rustdesk.com,${BIZ.WORK}`,
-    `RULE-SET,copilot,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,perplexity.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,mistral.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,x.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,grok.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,deepseek.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,huggingface.co,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,replicate.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,together.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,cohere.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,cohere.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,midjourney.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,stability.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,anthropic.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,cursor.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,cursor.sh,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,v0.dev,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,vercel.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,notebooklm.google,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,poe.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,character.ai,${BIZ.AI}`,
-    // v5.2.2: PI.ai/Inflection → GFW（中国被墙需代理，印尼可直连）
-    `DOMAIN-SUFFIX,inflection.ai,${BIZ.GFW}`,
-    `DOMAIN-SUFFIX,pi.ai,${BIZ.GFW}`,
-    `DOMAIN-SUFFIX,suno.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,suno.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,runway.ml,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,runwayml.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,openrouter.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,fireworks.ai,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,modal.com,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,modal.run,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,runpod.io,${BIZ.AI}`,
-    `RULE-SET,civitai,${BIZ.AI}`,
-    // ════════════════════════════════════════════════════════════════
-    //  v5.1.8 FIX#14-P0：Google 子服务防吞盾
-    //  szkane AiDomain.list 含 Google 宽域名（因 Gemini/Bard），导致 Google 全系误走 AI 代理
-    //  解法：在 RULE-SET,szkane-ai 之前前置所有 Google 非 AI 子服务精准规则
-    //  已安全（在此之前已匹配）：Gemini(RULE-SET) / NotebookLM / YouTube / dns.google
-    //  ▼ 以下规则从各业务区块提升至此，原位置 dead rules 已在 v5.1.9 清除
-    // ════════════════════════════════════════════════════════════════
-    // ── Google 邮件 ──
-    `DOMAIN-SUFFIX,gmail.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,googlemail.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.google.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,inbox.google.com,${BIZ.INTL_SITE}`,
-    // ── Google 即时通讯 ──
-    `RULE-SET,googlevoice,${BIZ.IM}`,
-    // ── Google 会议协作 ──
-    `DOMAIN-SUFFIX,meet.google.com,${BIZ.WORK}`,
-    `DOMAIN,meet.googleapis.com,${BIZ.WORK}`,
-    // ── Google 下载更新 ──
-    `DOMAIN-SUFFIX,dl.google.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,play.googleapis.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,android.clients.google.com,${BIZ.DOWNLOAD}`,
-    `RULE-SET,googlefcm,${BIZ.DOWNLOAD}`,
-    // ── Google 搜索引擎（兜底：MetaCubeX geosite:google 覆盖 google.com/co.*/com.*）──
-    `RULE-SET,google,${BIZ.TOOLS}`,
-    `RULE-SET,google-ip,${BIZ.TOOLS},no-resolve`,
-    // ════════════════════════════════════════════════════════════════
-    // v5.1: szkane AI 综合 + Accademia AI 补充
-    `RULE-SET,szkane-ai,${BIZ.AI}`,
-    `RULE-SET,szkane-ciciai,${BIZ.AI}`,
-    `RULE-SET,acc-appleai,${BIZ.AI}`,
-    `RULE-SET,acc-grok,${BIZ.AI}`,
-    `RULE-SET,acc-gemini,${BIZ.AI}`,
-    // v5.1.8 FIX#13-P2: 微软 Delivery Optimization 遥测非 Copilot AI，前置拦截
-    // 日志：match RuleSet/acc-copilot) --> geover.prod.do.dsp.mp.microsoft.com:443
-    `DOMAIN-SUFFIX,do.dsp.mp.microsoft.com,${BIZ.DOWNLOAD}`,
-    `RULE-SET,acc-copilot,${BIZ.AI}`,
-    `DOMAIN-SUFFIX,tradingview.com,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,tvcdn.com,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,coinglass.com,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,hyperliquid.xyz,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,hyperliquid-testnet.xyz,${BIZ.CRYPTO}`,
-    `RULE-SET,cryptocurrency,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,eth.limo,${BIZ.CRYPTO}`,
-    `DOMAIN-SUFFIX,glitternode.ru,${BIZ.CRYPTO}`,
-    `RULE-SET,binance,${BIZ.CRYPTO}`,
-    // v5.1: szkane Web3（DeFi/NFT/区块链RPC）★量化交易核心
-    `RULE-SET,szkane-web3,${BIZ.CRYPTO}`,
-    `RULE-SET,paypal,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,stripe.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,stripe.network,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,stripecdn.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,stripe.dev,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,wise.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,transferwise.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,revolut.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,revolut.me,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,braintreegateway.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,braintree-api.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,venmo.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,cash.app,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,squareup.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,square.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,adyen.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,checkout.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,klarna.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,afterpay.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,plaid.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,midtrans.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,gopay.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,ovo.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,dana.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,shopeepay.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,xendit.co,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,doku.com,${BIZ.PAYMENTS}`,
-    `RULE-SET,stripe,${BIZ.PAYMENTS}`,
-    `RULE-SET,visa,${BIZ.PAYMENTS}`,
-    `RULE-SET,tigerfintech,${BIZ.PAYMENTS}`,
-    // v5.1.1: Accademia 银行 × 10国 + 虚拟金融 × 4
-    ...ACC_BANK_RULES,
-    ...ACC_VF_RULES,
-    `DOMAIN,login.live.com,${BIZ.MS}`,
-    `DOMAIN,g.live.com,${BIZ.MS}`,
-    `DOMAIN-SUFFIX,officeapps.live.com,${BIZ.MS}`,
-    // v5.1.9 CLEAN#1: gmail.com/googlemail.com/mail.google.com/inbox.google.com 已提升至防吞盾（FIX#14），dead rules 已清除
-    `DOMAIN-SUFFIX,outlook.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,outlook.live.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,hotmail.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.live.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,outlook.office365.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,outlook.office.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.yahoo.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,ymail.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tutanota.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tuta.com,${BIZ.INTL_SITE}`,
-    // v5.1.3 FIX#7: Zoho 宽域名收窄为邮件专用子域名（防止吞掉 RULE-SET,zoho 会议协作规则）
-    `DOMAIN,mail.zoho.com,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.zoho.eu,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.zoho.in,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.zoho.com.au,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.zoho.jp,${BIZ.INTL_SITE}`,
-    `DOMAIN,mail.me.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,fastmail.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,fastmail.fm,${BIZ.INTL_SITE}`,
-    `RULE-SET,mail,${BIZ.INTL_SITE}`,
-    `RULE-SET,mailru,${BIZ.INTL_SITE}`,
-    `RULE-SET,protonmail,${BIZ.INTL_SITE}`,
-    `RULE-SET,spark,${BIZ.INTL_SITE}`,
-    'DOMAIN-SUFFIX,mail.qq.com,DIRECT',
-    'DOMAIN-SUFFIX,mail.163.com,DIRECT',
-    'DOMAIN-SUFFIX,mail.126.com,DIRECT',
-    'DOMAIN-SUFFIX,mail.sina.com.cn,DIRECT',
-    'DOMAIN-SUFFIX,mail.aliyun.com,DIRECT',
-    `RULE-SET,telegram,${BIZ.IM}`,
-    `RULE-SET,telegram-ip,${BIZ.IM},no-resolve`,
-    `RULE-SET,discord,${BIZ.IM}`,
-    `RULE-SET,whatsapp,${BIZ.IM}`,
-    `RULE-SET,line,${BIZ.IM}`,
-    `RULE-SET,kakaotalk,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,skype.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,skypeecs.net,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,skypeforbusiness.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,sfbassets.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,lync.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,signal.org,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,whispersystems.org,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,signal.art,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,viber.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,viber.io,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,element.io,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,matrix.org,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,zalo.me,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,zalopay.vn,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,wire.com,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,threema.ch,${BIZ.IM}`,
-    `RULE-SET,telegramnl,${BIZ.IM},no-resolve`,
-    `RULE-SET,telegramsg,${BIZ.IM},no-resolve`,
-    `RULE-SET,telegramus,${BIZ.IM},no-resolve`,
-    `RULE-SET,zalo,${BIZ.IM}`,
-    // v5.1.9 CLEAN#1: googlevoice 已提升至防吞盾（FIX#14），dead rule 已清除
-    `RULE-SET,italkbb,${BIZ.IM}`,
-    // v5.1: Accademia Signal 补充
-    `RULE-SET,acc-signal,${BIZ.IM}`,
-    `DOMAIN-SUFFIX,icq.com,${BIZ.IM}`,
-    `RULE-SET,twitter,${BIZ.SOCIAL}`,
-    `RULE-SET,twitter-ip,${BIZ.SOCIAL},no-resolve`,
-    `RULE-SET,tiktok,${BIZ.TOK}`,
-    `RULE-SET,reddit,${BIZ.SOCIAL}`,
-    `RULE-SET,facebook,${BIZ.SOCIAL}`,
-    `RULE-SET,facebook-ip,${BIZ.SOCIAL},no-resolve`,
-    `RULE-SET,instagram,${BIZ.SOCIAL}`,
-    `RULE-SET,snapchat,${BIZ.SOCIAL}`,
-    `RULE-SET,pinterest,${BIZ.SOCIAL}`,
-    `RULE-SET,linkedin,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,mastodon.social,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,joinmastodon.org,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,threads.net,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,bsky.app,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,bsky.social,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,quora.com,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,medium.com,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,flickr.com,${BIZ.SOCIAL}`,
-    `DOMAIN-SUFFIX,lemon8-app.com,${BIZ.SOCIAL}`,
-    `RULE-SET,tumblr,${BIZ.SOCIAL}`,
-    `RULE-SET,clubhouse,${BIZ.SOCIAL}`,
-    `RULE-SET,clubhouseip,${BIZ.SOCIAL},no-resolve`,
-    `RULE-SET,pixiv,${BIZ.SOCIAL}`,
-    `RULE-SET,truthsocial,${BIZ.SOCIAL}`,
-    `RULE-SET,vk,${BIZ.SOCIAL}`,
-    `RULE-SET,blued,${BIZ.CN_SITE}`,
-    `RULE-SET,disqus,${BIZ.SOCIAL}`,
-    `RULE-SET,imgur,${BIZ.SOCIAL}`,
-    `RULE-SET,pixnet,${BIZ.SOCIAL}`,
-    `RULE-SET,zoom,${BIZ.WORK}`,
-    `RULE-SET,slack,${BIZ.WORK}`,
-    `RULE-SET,teams,${BIZ.WORK}`,
-    // v5.1.9 CLEAN#1: meet.google.com/meet.googleapis.com 已提升至防吞盾（FIX#14），dead rules 已清除
-    `DOMAIN-SUFFIX,webex.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,wbx2.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,ciscospark.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,notion.so,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,notion.site,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,figma.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,linear.app,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,atlassian.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,jira.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,trello.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,bitbucket.org,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,asana.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,monday.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,clickup.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,basecamp.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,airtable.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,miro.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,canva.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,coda.io,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,loom.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,larksuite.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,larkoffice.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,gotomeeting.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,logmein.com,${BIZ.WORK}`,
-    `DOMAIN-SUFFIX,goto.com,${BIZ.WORK}`,
-    `RULE-SET,atlassian,${BIZ.WORK}`,
-    `RULE-SET,notion,${BIZ.WORK}`,
-    `RULE-SET,teamviewer,${BIZ.WORK}`,
-    `RULE-SET,zoho,${BIZ.WORK}`,
-    `RULE-SET,salesforce,${BIZ.WORK}`,
-    `RULE-SET,zendesk,${BIZ.WORK}`,
-    `RULE-SET,intercom,${BIZ.WORK}`,
-    `RULE-SET,remotedesktop,${BIZ.WORK}`,
-    // v5.1: Accademia 远程桌面补充
-    `RULE-SET,acc-rustdesk,${BIZ.WORK}`,
-    `RULE-SET,acc-parsec,${BIZ.WORK}`,
-    'DOMAIN-SUFFIX,feishu.cn,DIRECT',
-    'DOMAIN-SUFFIX,dingtalk.com,DIRECT',
-    'DOMAIN-SUFFIX,welink.huaweicloud.com,DIRECT',
+var SckiSubscriptionAdapter = (function() {
+  var NODE_DNS_HINT_LIMITS = {
+    activeNodeServers: 512,
+    domains: 128,
+    resolvers: 64,
+    policies: 64,
+    hosts: 64,
+    values: 8,
+    sourceEntries: 256,
+    sourceExactEntries: 4096,
+    stringLength: 512
+  }
 
-    // v5.1.2 FIX#2: 港澳台哔哩哔哩需港区代理解锁（v5.1.1 误归入 CNMEDIA/DIRECT 导致 412）
-    // ============ 🎵 TikTok ============
+  function isPlainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value)
+  }
 
-    // ============ 平台流媒体 ============
-    // ── YouTube ──
-    `RULE-SET,youtube,${BIZ.YT}`,
-    // ── Netflix ──
-    `RULE-SET,netflix,${BIZ.NFLX}`,
-    `RULE-SET,netflix-ip,${BIZ.NFLX},no-resolve`,
-    `RULE-SET,szkane-netflixip,${BIZ.NFLX},no-resolve`,
-    // ── Disney+/HBO/Hulu/Prime Video ──
-    `RULE-SET,disney,${BIZ.DSNP}`,
-    `RULE-SET,hbo,${BIZ.HBO}`,
-    `DOMAIN-SUFFIX,max.com,${BIZ.HBO}`,
-    `RULE-SET,hulu,${BIZ.HULU}`,
-    `DOMAIN-SUFFIX,hulu.jp,${BIZ.HULU}`,
-    `DOMAIN-SUFFIX,happyon.jp,${BIZ.HULU}`,
-    `RULE-SET,primevideo,${BIZ.PRIME}`,
-    `RULE-SET,amazon,${BIZ.PRIME}`,
-    // ── 音乐流媒体 ──
-    `RULE-SET,spotify,${BIZ.MUSIC}`,
-    `RULE-SET,soundcloud,${BIZ.MUSIC}`,
-    `RULE-SET,pandora,${BIZ.MUSIC}`,
-    `RULE-SET,pandoratv,${BIZ.MUSIC}`,
-    `RULE-SET,tidal,${BIZ.MUSIC}`,
-    `RULE-SET,deezer,${BIZ.MUSIC}`,
-    `RULE-SET,overcast,${BIZ.MUSIC}`,
-    `RULE-SET,lastfm,${BIZ.MUSIC}`,
-    `RULE-SET,qobuz,${BIZ.MUSIC}`,
+  function hasOwn(object, key) {
+    return Object.prototype.hasOwnProperty.call(object, key)
+  }
 
-    // ============ 🇭🇰 香港流媒体 ============
-    `RULE-SET,szkane-bilihmt,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,mytvsuper.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,mytv.com.hk,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,viu.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,viu.tv,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,hktv.com.hk,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,hktvmall.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,nowtv.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,nowe.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,rthk.hk,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,icable.com,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,cabletv.com.hk,${BIZ.STREAM_HK}`,
-    `DOMAIN-SUFFIX,hmvod.com.hk,${BIZ.STREAM_HK}`,
-    `RULE-SET,mytvsuper,${BIZ.STREAM_HK}`,
-    `RULE-SET,tvb,${BIZ.STREAM_HK}`,
-    `RULE-SET,encoretvb,${BIZ.STREAM_HK}`,
-    `RULE-SET,nowe,${BIZ.STREAM_HK}`,
-    `RULE-SET,rthk,${BIZ.STREAM_HK}`,
-    `RULE-SET,cabletv,${BIZ.STREAM_HK}`,
-    `RULE-SET,moov,${BIZ.STREAM_HK}`,
+  function recordReject(snapshot, count) {
+    snapshot.stats.rejected += count || 1
+  }
 
-    // ============ 🇹🇼 台湾流媒体 ============
-    `RULE-SET,bahamut,${BIZ.STREAM_TW}`,
-    `RULE-SET,kktv,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,litv.tv,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,video.friday.tw,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,friday.tw,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,linetv.tw,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,elta.tv,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,mod.cht.com.tw,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,hamivideo.hinet.net,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,ofiii.com,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,pts.org.tw,${BIZ.STREAM_TW}`,
-    `DOMAIN-SUFFIX,4gtv.tv,${BIZ.STREAM_TW}`,
-    `RULE-SET,litv,${BIZ.STREAM_TW}`,
-    `RULE-SET,friday,${BIZ.STREAM_TW}`,
-    `RULE-SET,hamivideo,${BIZ.STREAM_TW}`,
-    `RULE-SET,linetv,${BIZ.STREAM_TW}`,
-    `RULE-SET,vidoltv,${BIZ.STREAM_TW}`,
-    `RULE-SET,taiwangood,${BIZ.STREAM_TW}`,
-    `RULE-SET,cht,${BIZ.STREAM_TW}`,
+  function pushUnique(list, value, keyFn) {
+    var key = keyFn ? keyFn(value) : value
+    for (var i = 0; i < list.length; i++) {
+      if ((keyFn ? keyFn(list[i]) : list[i]) === key) return false
+    }
+    list.push(value)
+    return true
+  }
 
-    // ============ 🇯🇵 日韩流媒体 ============
-    `RULE-SET,abema,${BIZ.STREAM_JP}`,
-    `RULE-SET,dazn,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,tver.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,unext.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,video.unext.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,nhk.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,nhk.or.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,dmm.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,dmm.co.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,dtv.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,paravi.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,videomarket.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,fod.fujitv.co.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,gyao.yahoo.co.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,music.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,nicovideo.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,nicovideo.me,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,dmc.nico,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,radiko.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,lemino.docomo.ne.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,wowow.co.jp,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,wavve.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,tving.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,watcha.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,coupangplay.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,sbs.co.kr,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,kbs.co.kr,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,mbc.co.kr,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,jtbc.co.kr,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,tvn.cjenm.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,afreecatv.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,tv.naver.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,now.naver.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,vod.naver.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,navertv.naver.com,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,kakaotv.daum.net,${BIZ.STREAM_JP}`,
-    `DOMAIN-SUFFIX,navercorp.com,${BIZ.STREAM_JP}`,
-    `RULE-SET,dmm,${BIZ.STREAM_JP}`,
-    `RULE-SET,tver,${BIZ.STREAM_JP}`,
-    `RULE-SET,niconico,${BIZ.STREAM_JP}`,
-    `RULE-SET,rakuten,${BIZ.STREAM_JP}`,
-    `RULE-SET,japonx,${BIZ.STREAM_JP}`,
-    `RULE-SET,nikkei,${BIZ.STREAM_JP}`,
+  function isIPv4(value) {
+    var text = String(value || '')
+    var parts = text.split('.')
+    if (parts.length !== 4) return false
+    for (var i = 0; i < parts.length; i++) {
+      if (!/^\d{1,3}$/.test(parts[i])) return false
+      var number = Number(parts[i])
+      if (number < 0 || number > 255) return false
+    }
+    return true
+  }
 
-    // ============ 🇪🇺 欧洲流媒体 ============
-    `RULE-SET,bbc,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,itv.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,itvstatic.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,channel4.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,channel5.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,sky.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,nowtv.co.uk,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,britbox.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,canalplus.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,mycanal.fr,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,france.tv,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,tf1.fr,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,molotov.tv,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,arte.tv,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,joyn.de,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,zdf.de,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,ard.de,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,ardmediathek.de,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,rtlplus.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,raiplay.it,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,rtve.es,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,videoland.com,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,ruutu.fi,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,tv2.dk,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,svtplay.se,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,nrk.no,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,ivi.ru,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,kinopoisk.ru,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,okko.tv,${BIZ.STREAM_EU}`,
-    `DOMAIN-SUFFIX,more.tv,${BIZ.STREAM_EU}`,
-    `RULE-SET,itv,${BIZ.STREAM_EU}`,
-    `RULE-SET,all4,${BIZ.STREAM_EU}`,
-    `RULE-SET,my5,${BIZ.STREAM_EU}`,
-    `RULE-SET,skygo,${BIZ.STREAM_EU}`,
-    `RULE-SET,britboxuk,${BIZ.STREAM_EU}`,
-    `RULE-SET,londonreal,${BIZ.STREAM_EU}`,
-    `RULE-SET,szkane-uk,${BIZ.STREAM_EU}`,
+  function isIPv6(value) {
+    var text = String(value || '')
+    var match = text.match(/^\[([0-9a-fA-F:.]+)\]$/)
+    if (match) text = match[1]
+    if (!text || !/^[0-9a-fA-F:.]+$/.test(text) || text.indexOf(':') === -1 || text.indexOf(':::') !== -1) return false
+    var lastColon = text.lastIndexOf(':')
+    var ipv4Tail = lastColon !== -1 ? text.slice(lastColon + 1) : ''
+    if (ipv4Tail.indexOf('.') !== -1) {
+      if (!isIPv4(ipv4Tail)) return false
+      text = text.slice(0, lastColon + 1) + '0:0'
+    }
+    var compressedAt = text.indexOf('::')
+    if (compressedAt !== -1 && text.indexOf('::', compressedAt + 2) !== -1) return false
+    var groups = text.split(':').filter(function(group) { return group !== '' })
+    if (!groups.every(function(group) { return /^[0-9a-fA-F]{1,4}$/.test(group) })) return false
+    return compressedAt === -1 ? groups.length === 8 : groups.length < 8
+  }
 
-    // ============ 🌐 其他国外流媒体 ============
-    `RULE-SET,viu,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,wetv.vip,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,wetvinfo.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,iq.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,vidio.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,vidio.static6.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,rctiplus.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,visionplus.id,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,genflix.co.id,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,goplay.co.id,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,maxstream.tv,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,biliintl,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,viki.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,viki.io,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,iflix.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,catchplay.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,mewatch.sg,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,trueid.net,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,dimsum.my,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,asianmedia,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,iqiyiintl,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,joox,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,mewatch,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,viki,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,wetv,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,zee,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,acc-kwai,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,paramount,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,peacock,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,twitch,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,crunchyroll.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,vrv.co,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,pluto.tv,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,tubi.tv,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,fubo.tv,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,discoveryplus.com,${BIZ.STREAM_OTHER}`,
-    `DOMAIN-SUFFIX,appletv.com,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,cbs,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,nbc,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,pbs,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,attwatchtv,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,fox,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,fubotv,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,sling,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,vimeo,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,dailymotion,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,discoveryplus,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,americasvoice,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,cake,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,dood,${BIZ.STREAM_OTHER}`,
-    `RULE-SET,emby,${BIZ.STREAM_OTHER}`,
+  function unbracketIPv6(value) {
+    var text = String(value || '')
+    return text.charAt(0) === '[' && text.charAt(text.length - 1) === ']' ? text.slice(1, -1) : text
+  }
 
-    // ============ 🔧 工具与服务 ============
-    `DOMAIN-SUFFIX,aws.amazon.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,elasticbeanstalk.com,${BIZ.TOOLS}`,
-    `RULE-SET,bing,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,yahoo.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,yahoo.co.jp,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,duckduckgo.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,ddg.co,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,brave.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,yandex.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,yandex.ru,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,ecosia.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,startpage.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,you.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,search.naver.com,${BIZ.TOOLS}`,
-    `RULE-SET,scholar,${BIZ.TOOLS}`,
-    `RULE-SET,yandex,${BIZ.TOOLS}`,
-    `RULE-SET,github,${BIZ.TOOLS}`,
-    `RULE-SET,docker,${BIZ.TOOLS}`,
-    `RULE-SET,gitlab,${BIZ.TOOLS}`,
-    `GEOSITE,category-dev,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,npmjs.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,npmjs.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,yarnpkg.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,pypi.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,pythonhosted.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,crates.io,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,rubygems.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,packagist.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,maven.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,nuget.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,cocoapods.org,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,stackoverflow.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,stackexchange.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,sstatic.net,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,vercel.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,vercel.app,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,netlify.app,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,netlify.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,pages.dev,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,workers.dev,${BIZ.TOOLS}`,
-    `DOMAIN,dash.cloudflare.com,${BIZ.TOOLS}`,
-    `DOMAIN,api.cloudflare.com,${BIZ.TOOLS}`,
-    `DOMAIN,developers.cloudflare.com,${BIZ.TOOLS}`,
-    `DOMAIN,www.cloudflare.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,heroku.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,herokuapp.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,fly.io,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,railway.app,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,render.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,supabase.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,supabase.co,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,planetscale.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,neon.tech,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,digitalocean.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,vultr.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,linode.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,sentry.io,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,datadog.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,grafana.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,postman.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,jetbrains.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,hashicorp.com,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,terraform.io,${BIZ.TOOLS}`,
-    `DOMAIN-SUFFIX,vagrantup.com,${BIZ.TOOLS}`,
-    `RULE-SET,developer,${BIZ.TOOLS}`,
-    `RULE-SET,python,${BIZ.TOOLS}`,
-    `RULE-SET,gitbook,${BIZ.TOOLS}`,
-    `RULE-SET,jfrog,${BIZ.TOOLS}`,
-    `RULE-SET,sublimetext,${BIZ.TOOLS}`,
-    `RULE-SET,wordpress,${BIZ.TOOLS}`,
-    `RULE-SET,wix,${BIZ.TOOLS}`,
-    `RULE-SET,cisco,${BIZ.TOOLS}`,
-    `RULE-SET,ibm,${BIZ.TOOLS}`,
-    `RULE-SET,oracle,${BIZ.TOOLS}`,
-    `RULE-SET,unity,${BIZ.TOOLS}`,
-    `RULE-SET,szkane-developer,${BIZ.TOOLS}`,
+  function normaliseDomain(value) {
+    if (typeof value !== 'string') return ''
+    if (value.length > NODE_DNS_HINT_LIMITS.stringLength) return ''
+    var domain = value.trim().toLowerCase()
+    while (domain.length > 0 && domain.charAt(domain.length - 1) === '.') domain = domain.slice(0, -1)
+    if (!domain || domain.length > 253 || /[\x00-\x20\\/@:?#[\]]/.test(domain)) return ''
+    if (domain === 'localhost' || /^\d+(?:\.\d+){3}$/.test(domain)) return ''
+    var labels = domain.split('.')
+    for (var i = 0; i < labels.length; i++) {
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(labels[i])) return ''
+    }
+    return domain
+  }
 
-    // ============ Ⓜ️ 微软服务 ============
-    `RULE-SET,onedrive,${BIZ.MS}`,
-    `RULE-SET,microsoft,${BIZ.MS}`,
-    `RULE-SET,microsoftedge,${BIZ.MS}`,
-    `RULE-SET,acc-microsoftapps,${BIZ.MS}`,
+  function normaliseResolver(value) {
+    if (typeof value !== 'string') return ''
+    if (value.length > NODE_DNS_HINT_LIMITS.stringLength) return ''
+    var resolver = value.trim()
+    if (!resolver || resolver.length > NODE_DNS_HINT_LIMITS.stringLength || /[\x00-\x20]/.test(resolver)) return ''
+    var lowered = resolver.toLowerCase()
+    if (resolver.indexOf('#') !== -1 || /^(?:system|dhcp)$/i.test(resolver) || /^rcode:/i.test(resolver)) return ''
+    if (/[?&](?:skip-cert-verify|ecs|h3)=/i.test(resolver)) return ''
+    if (isIPv4(resolver)) return lowered
+    if (isIPv6(resolver)) return unbracketIPv6(resolver).toLowerCase()
+    var rawDomain = normaliseDomain(resolver)
+    if (rawDomain) return rawDomain
+    var match = resolver.match(/^(udp|tcp|tls|https|quic):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(\/[^\s]*)?$/i)
+    if (!match) return ''
+    var port = match[3] ? Number(match[3]) : 0
+    if (match[3] && (port < 1 || port > 65535)) return ''
+    var host = match[2]
+    if (isIPv6(host)) host = unbracketIPv6(host).toLowerCase()
+    else if (isIPv4(host)) host = host
+    else {
+      host = normaliseDomain(host)
+      if (!host) return ''
+    }
+    return match[1].toLowerCase() + '://' + host + (match[3] ? ':' + match[3] : '') + (match[4] || '')
+  }
 
-    // ============ 🍎 苹果服务 ============
-    `RULE-SET,applemusic,${BIZ.APPLE}`,
-    `RULE-SET,icloud,${BIZ.APPLE}`,
-    `RULE-SET,apple,${BIZ.APPLE}`,
-    `RULE-SET,appstore,${BIZ.APPLE}`,
-    `RULE-SET,appletv,${BIZ.APPLE}`,
-    `RULE-SET,applenews,${BIZ.APPLE}`,
-    `RULE-SET,appledev,${BIZ.APPLE}`,
-    `RULE-SET,appleproxy,${BIZ.APPLE}`,
-    `RULE-SET,siri,${BIZ.APPLE}`,
-    `RULE-SET,testflight,${BIZ.APPLE}`,
-    `RULE-SET,applefirmware,${BIZ.APPLE}`,
-    `RULE-SET,findmy,${BIZ.APPLE}`,
-    `RULE-SET,acc-applenews,${BIZ.APPLE}`,
-    `RULE-SET,acc-apple,${BIZ.APPLE}`,
+  function resolverKey(value) {
+    // normaliseResolver lower-cases only scheme and hostname. URL path/query
+    // are deliberately preserved because they can be case-sensitive.
+    return String(value || '')
+  }
 
-    // ============ 📥 下载更新 ============
-    `RULE-SET,systemota,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,windowsupdate.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,update.microsoft.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,download.microsoft.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,delivery.mp.microsoft.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,dl.delivery.mp.microsoft.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,officecdn.microsoft.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,officecdn.microsoft.com.edgesuite.net,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,download.mozilla.org,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,archive.mozilla.org,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,releases.ubuntu.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,archive.ubuntu.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,security.ubuntu.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,mirrors.kernel.org,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,dl.fedoraproject.org,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,repo.anaconda.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,conda.anaconda.org,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,repo.continuum.io,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,sourceforge.net,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,fosshub.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,filehippo.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,softonic.com,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,gcr.io,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,ghcr.io,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,quay.io,${BIZ.DOWNLOAD}`,
-    `DOMAIN-SUFFIX,registry.k8s.io,${BIZ.DOWNLOAD}`,
-    `RULE-SET,download,${BIZ.DOWNLOAD}`,
-    `RULE-SET,ubuntu,${BIZ.DOWNLOAD}`,
-    `RULE-SET,mozilla,${BIZ.DOWNLOAD}`,
-    `RULE-SET,apkpure,${BIZ.DOWNLOAD}`,
-    `RULE-SET,android,${BIZ.DOWNLOAD}`,
-    `RULE-SET,intel,${BIZ.DOWNLOAD}`,
-    `RULE-SET,nvidia,${BIZ.DOWNLOAD}`,
-    `RULE-SET,dell,${BIZ.DOWNLOAD}`,
-    `RULE-SET,hp,${BIZ.DOWNLOAD}`,
-    `RULE-SET,canon,${BIZ.DOWNLOAD}`,
-    `RULE-SET,lg,${BIZ.DOWNLOAD}`,
-    `RULE-SET,acc-macappupgrade,${BIZ.DOWNLOAD}`,
+  function resolverHost(value) {
+    var resolver = String(value || '')
+    if (isIPv4(resolver) || isIPv6(resolver)) return ''
+    var rawDomain = normaliseDomain(resolver)
+    if (rawDomain) return rawDomain
+    var match = resolver.match(/^(?:udp|tcp|tls|https|quic):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::\d{1,5})?(?:\/[^\s]*)?$/i)
+    if (!match || isIPv4(match[1]) || isIPv6(match[1])) return ''
+    return normaliseDomain(match[1])
+  }
 
-    // ============ 🛰️ BT/PT Tracker ============
-    `GEOSITE,tracker,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,tracker.opentrackr.org,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,open.stealth.si,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,tracker.torrent.eu.org,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,exodus.desync.com,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,tracker.openbittorrent.com,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,tracker.publicbt.com,${BIZ.TRACKER}`,
-    `DOMAIN-SUFFIX,tracker.dler.org,${BIZ.TRACKER}`,
-    `RULE-SET,privatetracker,${BIZ.TRACKER}`,
-    `RULE-SET,acc-emuleserver,${BIZ.TRACKER}`,
+  function normaliseResolverList(value, snapshot) {
+    var rawValues = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : [])
+    if (!Array.isArray(value) && typeof value !== 'string') {
+      recordReject(snapshot)
+      return []
+    }
+    var output = []
+    for (var i = 0; i < rawValues.length && i < NODE_DNS_HINT_LIMITS.values; i++) {
+      var resolver = normaliseResolver(rawValues[i])
+      if (!resolver) {
+        recordReject(snapshot)
+        continue
+      }
+      pushUnique(output, resolver, resolverKey)
+    }
+    if (rawValues.length > NODE_DNS_HINT_LIMITS.values) recordReject(snapshot, rawValues.length - NODE_DNS_HINT_LIMITS.values)
+    return output
+  }
 
-    // ============ 🚫 受限网站 ============
-    `DOMAIN-SUFFIX,jsdelivr.net,${BIZ.GFW}`,
-    `DOMAIN-SUFFIX,cloudflare-dns.com,${BIZ.GFW}`,
-    `GEOSITE,gfw,${BIZ.GFW}`,
-    `RULE-SET,loyalsoldier-gfw,${BIZ.GFW}`,
-    `RULE-SET,loyalsoldier-greatfire,${BIZ.GFW}`,
-    `RULE-SET,szkane-proxygfw,${BIZ.GFW}`,
+  function normaliseHostValues(value, snapshot) {
+    var rawValues = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : [])
+    if (!Array.isArray(value) && typeof value !== 'string') {
+      recordReject(snapshot)
+      return null
+    }
+    var ipValues = []
+    var redirects = []
+    for (var i = 0; i < rawValues.length && i < NODE_DNS_HINT_LIMITS.values; i++) {
+      if (typeof rawValues[i] !== 'string') {
+        recordReject(snapshot)
+        continue
+      }
+      if (rawValues[i].length > NODE_DNS_HINT_LIMITS.stringLength) {
+        recordReject(snapshot)
+        continue
+      }
+      var host = rawValues[i].trim()
+      var ipv6Literal = isIPv6(host)
+      // IPv6 literals legitimately contain colons and may be bracketed. Other
+      // URL/control syntax is rejected because hosts values are addresses or
+      // resolver hostnames only.
+      if (!host || host.length > NODE_DNS_HINT_LIMITS.stringLength || (!ipv6Literal && /[\x00-\x20\\/@?#[\]]/.test(host))) {
+        recordReject(snapshot)
+        continue
+      }
+      if (ipv6Literal) {
+        host = unbracketIPv6(host).toLowerCase()
+        pushUnique(ipValues, host, function(entry) { return String(entry).toLowerCase() })
+      } else if (isIPv4(host)) {
+        pushUnique(ipValues, host, function(entry) { return String(entry).toLowerCase() })
+      } else {
+        host = normaliseDomain(host)
+        if (!host) {
+          recordReject(snapshot)
+          continue
+        }
+        pushUnique(redirects, host, function(entry) { return String(entry).toLowerCase() })
+      }
+    }
+    if (rawValues.length > NODE_DNS_HINT_LIMITS.values) recordReject(snapshot, rawValues.length - NODE_DNS_HINT_LIMITS.values)
+    if (redirects.length) {
+      if (redirects.length === 1 && !ipValues.length) return redirects[0]
+      recordReject(snapshot)
+      return null
+    }
+    return ipValues.length ? ipValues : null
+  }
 
-    // ============ 🎮 国外游戏 ============
-    `RULE-SET,steam,${BIZ.GAME_INTL}`,
-    `RULE-SET,epic,${BIZ.GAME_INTL}`,
-    `RULE-SET,playstation,${BIZ.GAME_INTL}`,
-    `RULE-SET,nintendo,${BIZ.GAME_INTL}`,
-    `RULE-SET,xbox,${BIZ.GAME_INTL}`,
-    `RULE-SET,ea,${BIZ.GAME_INTL}`,
-    `RULE-SET,blizzard,${BIZ.GAME_INTL}`,
-    `GEOSITE,category-games,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,ubisoft.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,ubi.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,riotgames.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,leagueoflegends.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,valorant.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,rockstargames.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,gog.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,gogalaxy.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,bethesda.net,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,supercell.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,garena.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,hoyoverse.com,${BIZ.GAME_INTL}`,
-    `DOMAIN-SUFFIX,hoyolab.com,${BIZ.GAME_INTL}`,
-    `RULE-SET,rockstar,${BIZ.GAME_INTL}`,
-    `RULE-SET,riot,${BIZ.GAME_INTL}`,
-    `RULE-SET,gog,${BIZ.GAME_INTL}`,
-    `RULE-SET,supercell,${BIZ.GAME_INTL}`,
-    `RULE-SET,garena,${BIZ.GAME_INTL}`,
-    `RULE-SET,hoyoverse,${BIZ.GAME_INTL}`,
-    `RULE-SET,ubi,${BIZ.GAME_INTL}`,
-    `RULE-SET,wildrift,${BIZ.GAME_INTL}`,
-    `RULE-SET,sony,${BIZ.GAME_INTL}`,
+  function normalisePattern(value) {
+    if (typeof value !== 'string') return ''
+    if (value.length > NODE_DNS_HINT_LIMITS.stringLength) return ''
+    var pattern = value.trim().toLowerCase()
+    while (pattern.length > 0 && pattern.charAt(pattern.length - 1) === '.') pattern = pattern.slice(0, -1)
+    if (!pattern || pattern.length > 253 || /[\x00-\x20\\/@:?#[\]]/.test(pattern) || pattern === '*') return ''
+    if (pattern.slice(0, 2) === '+.') return normaliseDomain(pattern.slice(2)) ? pattern : ''
+    if (pattern.charAt(0) === '.') return normaliseDomain(pattern.slice(1)) ? pattern : ''
+    if (pattern.indexOf('*') !== -1) {
+      var labels = pattern.split('.')
+      if (labels.length < 2) return ''
+      for (var i = 0; i < labels.length; i++) {
+        if (labels[i] !== '*' && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(labels[i])) return ''
+      }
+      return pattern
+    }
+    return normaliseDomain(pattern)
+  }
 
-    // ============ 🌐 国外网站 ============
-    `DOMAIN-SUFFIX,amazonaws.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,awsstatic.com,${BIZ.INTL_SITE}`,
-    `RULE-SET,cloudflare-ip,${BIZ.INTL_SITE},no-resolve`,
-    `RULE-SET,cloudfront-ip,${BIZ.INTL_SITE},no-resolve`,
-    `RULE-SET,fastly-ip,${BIZ.INTL_SITE},no-resolve`,
-    `DOMAIN-SUFFIX,akamai.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,akamaized.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,akamaihd.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,akamaiedge.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,akamaitechnologies.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,edgekey.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,edgesuite.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,cloudfront.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,fastly.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,fastlylb.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,kxcdn.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,stackpathdns.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,stackpathcdn.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,b-cdn.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,bunny.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,bunnycdn.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,cdn77.org,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,azureedge.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,azurefd.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,msecnd.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,unpkg.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,r2.dev,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,ziffstatic.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,ucoz.ru,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,ucoz.net,${BIZ.INTL_SITE}`,
-    `RULE-SET,cloudflare,${BIZ.INTL_SITE}`,
-    `RULE-SET,akamai,${BIZ.INTL_SITE}`,
-    `RULE-SET,digicert,${BIZ.INTL_SITE}`,
-    `RULE-SET,globalsign,${BIZ.INTL_SITE}`,
-    `RULE-SET,sectigo,${BIZ.INTL_SITE}`,
-    `RULE-SET,brightcove,${BIZ.INTL_SITE}`,
-    `RULE-SET,jwplayer,${BIZ.INTL_SITE}`,
-    `RULE-SET,acc-fastly,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,letsencrypt.org,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,lencr.org,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tokopedia.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tokopedia.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,shopee.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,bukalapak.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,blibli.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,lazada.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,grab.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,gojek.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,gojek.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,traveloka.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tiket.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,telkomsel.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,telkom.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,indosatooredoo.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,im3.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,xl.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,smartfren.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tri.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,by.u.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,myrepublic.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,firstmedia.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,biznet.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,go.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,or.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,kompas.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,detik.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tempo.co,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,cnnindonesia.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,cnbcindonesia.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,liputan6.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,tribunnews.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,kumparan.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,idntimes.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,gofood.co.id,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,grabfood.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,66tutup.com,${BIZ.INTL_SITE}`,
-    `GEOIP,ID,${BIZ.INTL_SITE},no-resolve`,
-    `RULE-SET,acc-homeip-us,${BIZ.INTL_SITE},no-resolve`,
-    `RULE-SET,acc-homeip-jp,${BIZ.INTL_SITE},no-resolve`,
-    `RULE-SET,acc-aqara-global,${BIZ.INTL_SITE}`,
-    `RULE-SET,cnn,${BIZ.INTL_SITE}`,
-    `RULE-SET,nytimes,${BIZ.INTL_SITE}`,
-    `RULE-SET,bloomberg,${BIZ.INTL_SITE}`,
-    `RULE-SET,ebay,${BIZ.INTL_SITE}`,
-    `RULE-SET,nike,${BIZ.INTL_SITE}`,
-    `RULE-SET,adobe,${BIZ.INTL_SITE}`,
-    `RULE-SET,samsung,${BIZ.INTL_SITE}`,
-    `RULE-SET,tesla,${BIZ.INTL_SITE}`,
-    `RULE-SET,dropbox,${BIZ.INTL_SITE}`,
-    `RULE-SET,mega,${BIZ.INTL_SITE}`,
-    `RULE-SET,wikipedia,${BIZ.INTL_SITE}`,
-    `RULE-SET,duolingo,${BIZ.INTL_SITE}`,
-    `RULE-SET,proxy,${BIZ.INTL_SITE}`,
-    `RULE-SET,acc-waybackmachine,${BIZ.INTL_SITE}`,
-    `RULE-SET,acc-pornhub,${BIZ.INTL_SITE}`,
-    `RULE-SET,szkane-khan,${BIZ.INTL_SITE}`,
-    `RULE-SET,szkane-edutools,${BIZ.INTL_SITE}`,
-    `RULE-SET,naver,${BIZ.INTL_SITE}`,
-    `RULE-SET,ehgallery,${BIZ.INTL_SITE}`,
-    ...GEO_REGIONS_INTL.map(r => `RULE-SET,acc-geo-d-${r.toLowerCase().replace(/_/g,'-')},${BIZ.INTL_SITE}`),
-    ...GEO_REGIONS_INTL.map(r => `RULE-SET,acc-geo-ip-${r.toLowerCase().replace(/_/g,'-')},${BIZ.INTL_SITE},no-resolve`),
-    `DOMAIN-SUFFIX,archive.org,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,udemy.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,udemycdn.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,grammarly.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,grammarly.io,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,jetbrains.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,theguardian.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,guardianapis.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,box.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,boxcdn.net,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,noip.com,${BIZ.INTL_SITE}`,
-    `DOMAIN-SUFFIX,bca.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,klikbca.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,bni.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,bri.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,bankmandiri.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,danamon.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,permatabank.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,cimbniaga.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,btn.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,ocbcnisp.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,banksinarmas.com,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,idx.co.id,${BIZ.PAYMENTS}`,
-    `DOMAIN-SUFFIX,ksei.co.id,${BIZ.PAYMENTS}`,
+  function patternMatches(pattern, domain) {
+    if (pattern.slice(0, 2) === '+.') {
+      var plusBase = pattern.slice(2)
+      return domain === plusBase || domain.slice(-(plusBase.length + 1)) === '.' + plusBase
+    }
+    if (pattern.charAt(0) === '.') {
+      var dotBase = pattern.slice(1)
+      return domain !== dotBase && domain.slice(-(dotBase.length + 1)) === '.' + dotBase
+    }
+    if (pattern.indexOf('*') !== -1) {
+      var patternLabels = pattern.split('.')
+      var domainLabels = domain.split('.')
+      if (patternLabels.length !== domainLabels.length) return false
+      for (var i = 0; i < patternLabels.length; i++) {
+        if (patternLabels[i] !== '*' && patternLabels[i] !== domainLabels[i]) return false
+      }
+      return true
+    }
+    return pattern === domain
+  }
 
-    // ============ 🕹️ 国内游戏 ============
-    `DOMAIN-SUFFIX,mihoyo.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,miyoushe.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,yuanshen.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,bhsr.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,zenlesszonezero.com,${BIZ.GAME_CN}`,
-    `DOMAIN,game.163.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,gm.163.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,ds.163.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,nie.163.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,nie.netease.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,update.netease.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,netease.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,wegame.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,wegame.com.cn,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,perfect-world.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,wanmei.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,xd.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,taptap.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,taptap.io,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,papegames.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,hypergryph.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,gryphline.com,${BIZ.GAME_CN}`,
-    `DOMAIN-SUFFIX,lilith.com,${BIZ.GAME_CN}`,
-    `RULE-SET,steamcn,${BIZ.GAME_CN}`,
-    `RULE-SET,wanmeishijie,${BIZ.GAME_CN}`,
-    `RULE-SET,wankahuanju,${BIZ.GAME_CN}`,
-    `RULE-SET,majsoul,${BIZ.GAME_CN}`,
+  function patternScore(pattern) {
+    if (pattern.indexOf('*') !== -1) return 3000 + (pattern.split('.').length * 10) + pattern.replace(/\*/g, '').length
+    if (pattern.slice(0, 2) === '+.' || pattern.charAt(0) === '.') return 2000 + pattern.length
+    return 10000 + pattern.length
+  }
 
-    // ============ 📺 国内流媒体 ============
-    `RULE-SET,bilibili,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,iqiyi.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,iqiyipic.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,71.am,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,youku.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,ykimg.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,soku.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,v.qq.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,video.qq.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-KEYWORD,tencentvideo,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,mgtv.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,hitv.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,hunantv.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,douyin.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,douyinpic.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,douyinvod.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,ixigua.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,pstatp.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,snssdk.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,sohu.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,music.163.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,ntes53.netease.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,y.qq.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,music.qq.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,kugou.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,kuwo.cn,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,xiaohongshu.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,xhscdn.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,kuaishou.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,gifshow.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,weibo.com,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,weibo.cn,${BIZ.CNMEDIA}`,
-    `DOMAIN-SUFFIX,sinaimg.cn,${BIZ.CNMEDIA}`,
-    `RULE-SET,iqiyi,${BIZ.CNMEDIA}`,
-    `RULE-SET,youku,${BIZ.CNMEDIA}`,
-    `RULE-SET,tencentvideo,${BIZ.CNMEDIA}`,
-    `RULE-SET,douyin,${BIZ.CNMEDIA}`,
-    `RULE-SET,bytedance,${BIZ.CNMEDIA}`,
-    `RULE-SET,kuaishou,${BIZ.CNMEDIA}`,
-    `RULE-SET,weibo,${BIZ.CNMEDIA}`,
-    `RULE-SET,xiaohongshu,${BIZ.CNMEDIA}`,
-    `RULE-SET,neteasemusic,${BIZ.CNMEDIA}`,
-    `RULE-SET,kugoukuwo,${BIZ.CNMEDIA}`,
-    `RULE-SET,sohu,${BIZ.CNMEDIA}`,
-    `RULE-SET,acfun,${BIZ.CNMEDIA}`,
-    `RULE-SET,douyu,${BIZ.CNMEDIA}`,
-    `RULE-SET,huya,${BIZ.CNMEDIA}`,
-    `RULE-SET,himalaya,${BIZ.CNMEDIA}`,
-    `RULE-SET,cctv,${BIZ.CNMEDIA}`,
-    `RULE-SET,hunantv,${BIZ.CNMEDIA}`,
-    `RULE-SET,pptv,${BIZ.CNMEDIA}`,
-    `RULE-SET,funshion,${BIZ.CNMEDIA}`,
-    `RULE-SET,letv,${BIZ.CNMEDIA}`,
-    `RULE-SET,taihemusic,${BIZ.CNMEDIA}`,
-    `RULE-SET,kukemusic,${BIZ.CNMEDIA}`,
-    `RULE-SET,hibymusic,${BIZ.CNMEDIA}`,
-    `RULE-SET,miwu,${BIZ.CNMEDIA}`,
-    `RULE-SET,migu,${BIZ.CNMEDIA}`,
-    `RULE-SET,iptvmainland,${BIZ.CNMEDIA}`,
-    `RULE-SET,iptvother,${BIZ.CNMEDIA}`,
-    `RULE-SET,cibn,${BIZ.CNMEDIA}`,
-    `RULE-SET,bestv,${BIZ.CNMEDIA}`,
-    `RULE-SET,huashutv,${BIZ.CNMEDIA}`,
-    `RULE-SET,smg,${BIZ.CNMEDIA}`,
-    `RULE-SET,hwtv,${BIZ.CNMEDIA}`,
-    `RULE-SET,nivodtv,${BIZ.CNMEDIA}`,
-    `RULE-SET,olevod,${BIZ.CNMEDIA}`,
-    `RULE-SET,dandanzan,${BIZ.CNMEDIA}`,
-    `RULE-SET,dandanplay,${BIZ.CNMEDIA}`,
-    `RULE-SET,tiantiankankan,${BIZ.CNMEDIA}`,
-    `RULE-SET,yizhibo,${BIZ.CNMEDIA}`,
-    `RULE-SET,ku6,${BIZ.CNMEDIA}`,
-    `RULE-SET,56,${BIZ.CNMEDIA}`,
-    `RULE-SET,cetv,${BIZ.CNMEDIA}`,
-    `RULE-SET,yyets,${BIZ.CNMEDIA}`,
-    `RULE-SET,acc-alipan,${BIZ.CNMEDIA}`,
-    `RULE-SET,acc-baidunetdisk,${BIZ.CNMEDIA}`,
-    `RULE-SET,acc-weiyun,${BIZ.CNMEDIA}`,
-    // v5.1.1: Accademia FakeLocation × 10 平台（国内APP IP归属地伪装）
-    ...ACC_FAKE_LOCATION_RULES,
+  function sameValues(left, right) {
+    if (Array.isArray(left) || Array.isArray(right)) {
+      if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+      for (var i = 0; i < left.length; i++) {
+        if (String(left[i]) !== String(right[i])) return false
+      }
+      return true
+    }
+    return typeof left === 'string' && typeof right === 'string' && left === right
+  }
 
-    // ============ 🏠 国内网站 ============
-    `DOMAIN-SUFFIX,163.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,126.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,126.net,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,jianguoyun.com,${BIZ.CN_SITE}`,
-    // v5.4.19 #2 借鉴 Proxy-override：国内前端 CDN 直连前置（纯静态库托管，无 tracker 冲突）。
-    `DOMAIN-SUFFIX,baomitu.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,bootcss.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,staticfile.org,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,upaiyun.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,zhimg.com,${BIZ.CN_SITE}`,
-    `RULE-SET,cn,${BIZ.CN_SITE}`,
-    `RULE-SET,cn-ip,${BIZ.CN_SITE},no-resolve`,
-    `DOMAIN-SUFFIX,alimama.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,zxtdjy.com,${BIZ.CN_SITE}`,
-    `DOMAIN-SUFFIX,zhihu.co,${BIZ.CN_SITE}`,
-    `RULE-SET,acc-chinamax,${BIZ.CN_SITE}`,
-    // v5.4.4 FIX#144: bbys.app 视频播放走直连
-    `DOMAIN-SUFFIX,bbys.app,DIRECT`,
-    `RULE-SET,acc-aqara-cn,${BIZ.CN_SITE}`,
-    `RULE-SET,acc-geo-d-asia-china,${BIZ.CN_SITE}`,
-    `RULE-SET,acc-geo-ip-asia-china,${BIZ.CN_SITE},no-resolve`,
+  function hasValues(value) {
+    return Array.isArray(value) ? value.length > 0 : (typeof value === 'string' && value.length > 0)
+  }
 
-    // ============ GEOIP 标签路由 ============
-    `GEOIP,cloudflare,${BIZ.INTL_SITE},no-resolve`,
-    `GEOIP,telegram,${BIZ.IM},no-resolve`,
-    `GEOIP,netflix,${BIZ.NFLX},no-resolve`,
-    `GEOIP,facebook,${BIZ.SOCIAL},no-resolve`,
-    `GEOIP,twitter,${BIZ.SOCIAL},no-resolve`,
-    `GEOIP,google,${BIZ.TOOLS},no-resolve`,
-    `GEOIP,CN,${BIZ.CN_SITE},no-resolve`,
+  function copyValue(value) {
+    return Array.isArray(value) ? value.slice() : value
+  }
 
-    `MATCH,${BIZ.FINAL}`,
-  ]
-  // FlClash: 原地写入（splice 清空 + 逐个 push），不能在 QuickJS FFI 桥接层直接重赋值
-  config.rules.splice(0, config.rules.length)
-  for (var _ri = 0; _ri < _newRules.length; _ri++) { config.rules.push(_newRules[_ri]) }
-  log(`[${VERSION}] Injected ${config.rules.length} rules`)
+  function isExactPattern(pattern) {
+    return pattern.indexOf('*') === -1 && pattern.slice(0, 2) !== '+.' && pattern.charAt(0) !== '.'
+  }
+
+  // Preserve direct exact active-node keys even when an untrusted source has a
+  // large number of unrelated entries. Wildcards remain bounded to prevent a
+  // source map from turning into an unbounded scan surface.
+  function buildSourceView(source, activeDomains, snapshot) {
+    if (!isPlainObject(source)) return Object.create(null)
+    var view = Object.create(null)
+    var active = Object.create(null)
+    activeDomains.forEach(function(domain) {
+      active[domain] = true
+      if (hasOwn(source, domain)) view[domain] = source[domain]
+      if (hasOwn(source, domain + '.') && !hasOwn(view, domain + '.')) view[domain + '.'] = source[domain + '.']
+    })
+    // Do not call Object.keys(source): a malicious subscription could make it
+    // allocate a massive array before the cap has a chance to work. Scan a
+    // bounded prefix for case-insensitive exact active-node keys, while keeping
+    // wildcard evaluation at the tighter cap.
+    var scannedEntries = 0
+    var wildcardEntries = 0
+    for (var rawPattern in source) {
+      if (!hasOwn(source, rawPattern)) continue
+      scannedEntries += 1
+      if (scannedEntries > NODE_DNS_HINT_LIMITS.sourceExactEntries) {
+        recordReject(snapshot)
+        break
+      }
+      var pattern = normalisePattern(rawPattern)
+      if (!pattern) {
+        recordReject(snapshot)
+        continue
+      }
+      if (isExactPattern(pattern)) {
+        if (active[pattern]) view[rawPattern] = source[rawPattern]
+        continue
+      }
+      if (wildcardEntries >= NODE_DNS_HINT_LIMITS.sourceEntries) {
+        recordReject(snapshot)
+        continue
+      }
+      wildcardEntries += 1
+      view[rawPattern] = source[rawPattern]
+    }
+    return view
+  }
+
+  function selectForDomain(source, domain, normaliseValues, snapshot) {
+    if (!isPlainObject(source)) return { matched: false, value: null }
+    var best = null
+    var bestScore = -1
+    var conflict = false
+    var matched = false
+    Object.keys(source).forEach(function(rawPattern) {
+      var pattern = normalisePattern(rawPattern)
+      if (!pattern || !patternMatches(pattern, domain)) return
+      matched = true
+      var values = normaliseValues(source[rawPattern], snapshot)
+      if (!hasValues(values)) return
+      var score = patternScore(pattern)
+      if (score > bestScore) {
+        best = copyValue(values)
+        bestScore = score
+        conflict = false
+      } else if (score === bestScore && !sameValues(best, values)) {
+        conflict = true
+      }
+    })
+    if (conflict) {
+      recordReject(snapshot)
+      return { matched: true, value: null }
+    }
+    return { matched: matched, value: best }
+  }
+
+  function resolveProfile(runtimeProfile) {
+    var requested = typeof runtimeProfile === 'string'
+      ? runtimeProfile
+      : (isPlainObject(runtimeProfile) && typeof runtimeProfile.id === 'string' ? runtimeProfile.id : '')
+    return sckiResolveSubscriptionAdapterProfile(requested)
+  }
+
+  function createSnapshot(profile) {
+    return {
+      profile: profile.id,
+      domains: [],
+      resolvers: [],
+      policy: Object.create(null),
+      hosts: Object.create(null),
+      stats: { domains: 0, resolvers: 0, policies: 0, hosts: 0, rejected: 0 }
+    }
+  }
+
+  function addPolicy(snapshot, domain, values) {
+    var newResolvers = []
+    values.forEach(function(resolver) {
+      var known = false
+      for (var i = 0; i < snapshot.resolvers.length; i++) {
+        if (resolverKey(snapshot.resolvers[i]) === resolverKey(resolver)) {
+          known = true
+          break
+        }
+      }
+      if (!known) {
+        for (var j = 0; j < newResolvers.length; j++) {
+          if (resolverKey(newResolvers[j]) === resolverKey(resolver)) {
+            known = true
+            break
+          }
+        }
+      }
+      if (!known) newResolvers.push(resolver)
+    })
+    if (snapshot.resolvers.length + newResolvers.length > NODE_DNS_HINT_LIMITS.resolvers) {
+      recordReject(snapshot, values.length)
+      return false
+    }
+    snapshot.policy[domain] = values.slice()
+    newResolvers.forEach(function(resolver) { snapshot.resolvers.push(resolver) })
+    return true
+  }
+
+  function captureNodeDns(sourceConfig, activeNodeServers, runtimeProfile) {
+    var profile = resolveProfile(runtimeProfile)
+    var snapshot = createSnapshot(profile)
+    if (profile.nodeDnsProjection === 'off') return snapshot
+    if (!sourceConfig || !Array.isArray(activeNodeServers)) return snapshot
+
+    var servers = activeNodeServers.slice(0, NODE_DNS_HINT_LIMITS.activeNodeServers)
+    if (activeNodeServers.length > NODE_DNS_HINT_LIMITS.activeNodeServers) recordReject(snapshot, activeNodeServers.length - NODE_DNS_HINT_LIMITS.activeNodeServers)
+    servers.forEach(function(server) {
+      var domain = normaliseDomain(server)
+      if (!domain) return
+      if (snapshot.domains.length >= NODE_DNS_HINT_LIMITS.domains) {
+        recordReject(snapshot)
+        return
+      }
+      pushUnique(snapshot.domains, domain)
+    })
+    snapshot.stats.domains = snapshot.domains.length
+    if (!snapshot.domains.length) return snapshot
+
+    var sourceDns = isPlainObject(sourceConfig.dns) ? sourceConfig.dns : Object.create(null)
+    var sourceProxyResolvers = []
+    if (profile.nodeDnsProjection === 'adaptive' && hasOwn(sourceDns, 'proxy-server-nameserver')) {
+      sourceProxyResolvers = normaliseResolverList(sourceDns['proxy-server-nameserver'], snapshot)
+    }
+    var sourceNodePolicy = buildSourceView(sourceDns['proxy-server-nameserver-policy'], snapshot.domains, snapshot)
+    var sourceGlobalPolicy = buildSourceView(sourceDns['nameserver-policy'], snapshot.domains, snapshot)
+
+    snapshot.domains.forEach(function(domain) {
+      if (Object.keys(snapshot.policy).length >= NODE_DNS_HINT_LIMITS.policies) {
+        recordReject(snapshot)
+        return
+      }
+      var selection = selectForDomain(sourceNodePolicy, domain, normaliseResolverList, snapshot)
+      if (!selection.matched) selection = selectForDomain(sourceGlobalPolicy, domain, normaliseResolverList, snapshot)
+      if (!selection.matched && profile.nodeDnsProjection === 'adaptive' && sourceProxyResolvers.length) {
+        selection = { matched: true, value: sourceProxyResolvers.slice() }
+      }
+      if (!hasValues(selection.value)) return
+      addPolicy(snapshot, domain, selection.value)
+    })
+
+    var hostTargets = []
+    snapshot.resolvers.forEach(function(resolver) {
+      var host = resolverHost(resolver)
+      if (host) pushUnique(hostTargets, host)
+    })
+    Object.keys(snapshot.policy).forEach(function(domain) { pushUnique(hostTargets, domain) })
+    var sourceHosts = buildSourceView(sourceConfig.hosts, hostTargets, snapshot)
+    hostTargets.forEach(function(domain) {
+      if (Object.keys(snapshot.hosts).length >= NODE_DNS_HINT_LIMITS.hosts) {
+        recordReject(snapshot)
+        return
+      }
+      var selection = selectForDomain(sourceHosts, domain, normaliseHostValues, snapshot)
+      if (hasValues(selection.value)) snapshot.hosts[domain] = copyValue(selection.value)
+    })
+
+    snapshot.stats.resolvers = snapshot.resolvers.length
+    snapshot.stats.policies = Object.keys(snapshot.policy).length
+    snapshot.stats.hosts = Object.keys(snapshot.hosts).length
+    return snapshot
+  }
+
+  function hasRepositoryPssBaseline(dns) {
+    var values = dns && dns['proxy-server-nameserver']
+    if (typeof values === 'string') return values.trim().length > 0
+    return Array.isArray(values) && values.some(function(value) { return typeof value === 'string' && value.trim().length > 0 })
+  }
+
+  function buildReport(profile, snapshot, applied, reason) {
+    var stats = snapshot && isPlainObject(snapshot.stats) ? snapshot.stats : {}
+    return {
+      profile: profile.id,
+      mode: profile.nodeDnsProjection,
+      applied: !!applied,
+      reason: reason,
+      domains: Number(stats.domains || 0),
+      resolvers: Number(stats.resolvers || 0),
+      policies: Number(stats.policies || 0),
+      hosts: Number(stats.hosts || 0),
+      rejected: Number(stats.rejected || 0)
+    }
+  }
+
+  // captureNodeDns produces an opaque snapshot, but applyNodeDns still
+  // validates its declared active-node domain closure before touching
+  // repository-owned DNS. This keeps the public seam fail-closed if a future
+  // Adapter passes a stale or hand-built object.
+  function isCanonicalResolverValues(values) {
+    if (!Array.isArray(values) || !values.length || values.length > NODE_DNS_HINT_LIMITS.values) return false
+    var seen = Object.create(null)
+    for (var i = 0; i < values.length; i++) {
+      if (typeof values[i] !== 'string' || normaliseResolver(values[i]) !== values[i]) return false
+      var key = resolverKey(values[i])
+      if (seen[key]) return false
+      seen[key] = true
+    }
+    return true
+  }
+
+  function isCanonicalHostValue(value) {
+    var scratch = { stats: { rejected: 0 } }
+    var normalised = normaliseHostValues(value, scratch)
+    return scratch.stats.rejected === 0 && hasValues(normalised) && sameValues(normalised, value)
+  }
+
+  function validateSnapshot(snapshot, profile) {
+    if (!snapshot || !isPlainObject(snapshot.policy) || !isPlainObject(snapshot.hosts)) return { ok: false, reason: 'invalid-snapshot' }
+    if (snapshot.profile !== profile.id) return { ok: false, reason: 'profile-mismatch' }
+    if (!Array.isArray(snapshot.domains) || snapshot.domains.length > NODE_DNS_HINT_LIMITS.domains) return { ok: false, reason: 'invalid-snapshot' }
+
+    var activeDomains = Object.create(null)
+    for (var domainIndex = 0; domainIndex < snapshot.domains.length; domainIndex++) {
+      var activeDomain = snapshot.domains[domainIndex]
+      if (typeof activeDomain !== 'string' || normaliseDomain(activeDomain) !== activeDomain || activeDomains[activeDomain]) {
+        return { ok: false, reason: 'invalid-snapshot' }
+      }
+      activeDomains[activeDomain] = true
+    }
+    var policyKeys = []
+    var allowedHostDomains = Object.create(null)
+    for (var policyDomain in snapshot.policy) {
+      if (!hasOwn(snapshot.policy, policyDomain)) continue
+      if (policyKeys.length >= NODE_DNS_HINT_LIMITS.policies || !activeDomains[policyDomain] || normaliseDomain(policyDomain) !== policyDomain || !isCanonicalResolverValues(snapshot.policy[policyDomain])) {
+        return { ok: false, reason: 'invalid-snapshot' }
+      }
+      policyKeys.push(policyDomain)
+      allowedHostDomains[policyDomain] = true
+      snapshot.policy[policyDomain].forEach(function(resolver) {
+        var resolverDomain = resolverHost(resolver)
+        if (resolverDomain) allowedHostDomains[resolverDomain] = true
+      })
+    }
+    var hostKeys = []
+    for (var hostDomain in snapshot.hosts) {
+      if (!hasOwn(snapshot.hosts, hostDomain)) continue
+      if (hostKeys.length >= NODE_DNS_HINT_LIMITS.hosts || !allowedHostDomains[hostDomain] || normaliseDomain(hostDomain) !== hostDomain || !isCanonicalHostValue(snapshot.hosts[hostDomain])) {
+        return { ok: false, reason: 'invalid-snapshot' }
+      }
+      hostKeys.push(hostDomain)
+    }
+    return { ok: true, policyKeys: policyKeys, hostKeys: hostKeys }
+  }
+
+  function applyNodeDns(repositoryConfig, snapshot, runtimeProfile) {
+    var profile = resolveProfile(runtimeProfile)
+    if (profile.nodeDnsProjection === 'off') return buildReport(profile, snapshot, false, 'profile-off')
+    if (!isPlainObject(repositoryConfig) || !isPlainObject(repositoryConfig.dns)) {
+      return buildReport(profile, snapshot, false, 'invalid-repository-config')
+    }
+    if (!hasRepositoryPssBaseline(repositoryConfig.dns)) {
+      return buildReport(profile, snapshot, false, 'missing-pss-baseline')
+    }
+    var validation = validateSnapshot(snapshot, profile)
+    if (!validation.ok) return buildReport(profile, snapshot, false, validation.reason)
+    var policyKeys = validation.policyKeys
+    var hostKeys = validation.hostKeys
+    if (!policyKeys.length && !hostKeys.length) return buildReport(profile, snapshot, false, 'no-hints')
+
+    if (policyKeys.length) {
+      repositoryConfig.dns['proxy-server-nameserver-policy'] = Object.create(null)
+      policyKeys.forEach(function(domain) { repositoryConfig.dns['proxy-server-nameserver-policy'][domain] = snapshot.policy[domain].slice() })
+    } else {
+      delete repositoryConfig.dns['proxy-server-nameserver-policy']
+    }
+    if (!isPlainObject(repositoryConfig.hosts)) repositoryConfig.hosts = Object.create(null)
+    hostKeys.forEach(function(domain) {
+      if (!hasOwn(repositoryConfig.hosts, domain)) repositoryConfig.hosts[domain] = copyValue(snapshot.hosts[domain])
+    })
+    return buildReport(profile, snapshot, true, 'applied')
+  }
+
+  return {
+    captureNodeDns: captureNodeDns,
+    applyNodeDns: applyNodeDns,
+    resolveProfile: resolveProfile
+  }
+}())
+// <<< SCKI NODE DNS HINTS: END
+
+function collectActiveSubscriptionNodeServers(proxies) {
+  if (!Array.isArray(proxies)) return []
+  var servers = []
+  proxies.forEach(function(proxy) {
+    if (!proxy || typeof proxy !== 'object' || isInfoNode(proxy.name)) return
+    if (typeof proxy.server === 'string') servers.push(proxy.server)
+  })
+  return servers
 }
 
-// ================================================================
+function logSubscriptionAdapterReport(report) {
+  if (!report) return
+  var message = '[' + VERSION + '] Node-DNS profile=' + report.profile + ' applied=' + report.applied + ' reason=' + report.reason + ' domains=' + report.domains + ' resolvers=' + report.resolvers + ' policies=' + report.policies + ' hosts=' + report.hosts + ' rejected=' + report.rejected
+  if (typeof log === 'function') log(message)
+  else if (typeof console !== 'undefined' && console.log) console.log(message)
+}
+
 //  模块 I：全局参数覆写
 // ================================================================
 
-function overwriteGeneral(config) {
+function overwriteGeneral(config, nodeDnsHints) {
   config['unified-delay'] = true
   config['tcp-concurrent'] = true
   config['find-process-mode'] = 'strict'
+  // v6.0.9-flclash.2: 顶层 ipv6 与 dns.ipv6 是两套开关；移动端只关 DNS AAAA 仍可能让内核接收 IPv6 流量。
+  config.ipv6 = false
   config['keep-alive-idle'] = 30
   config['keep-alive-interval'] = 15
   // FlClash: 端口/TUN/GeoX 由 App UI 管理，脚本不覆写。
-  //   - 外部资源（GeoX URL）：见 FlClash/README.md §必改配置
+  //   - 外部资源（GeoX URL）：可保留 App 默认，见 FlClash/README.md
+  //   - 必须关闭 App「DNS 覆写」，否则后续合并会覆盖下面的 DNS。
   //   - DNS：default-nameserver 纯 IP 自举，其它 resolver 固定 DoH
-  if (!config.dns) config.dns = {}
+  if (!config.dns || typeof config.dns !== 'object' || Array.isArray(config.dns)) config.dns = {}
   config.dns.enable = true
   if (!config.dns.listen) config.dns.listen = '0.0.0.0:1053'
   if (!config.dns['enhanced-mode']) config.dns['enhanced-mode'] = 'fake-ip'
@@ -2350,14 +1016,16 @@ function overwriteGeneral(config) {
   config.dns['use-system-hosts'] = false
   config.dns['cache-algorithm'] = 'arc'
   // v5.4.17 FIX#FLCLASH-HOSTS: Hosts DNS 预解析——消除 fake-ip 冷启动循环依赖
-  if (!config.hosts) config.hosts = {}
+  // The runtime Adapter only re-adds source hosts that are needed for actual
+  // node/resolver domains; source-wide host rewrites do not cross this seam.
+  config.hosts = {}
   var dnsHosts = {
     'dns.alidns.com': ['223.5.5.5', '223.6.6.6'],
     'doh.pub': ['119.29.29.29'],
     'dns.google': ['8.8.8.8', '8.8.4.4'],
     'cloudflare-dns.com': ['1.1.1.1', '1.0.0.1']
   }
-  Object.keys(dnsHosts).forEach(function(k) { if (!config.hosts[k]) config.hosts[k] = dnsHosts[k] })
+  Object.keys(dnsHosts).forEach(function(k) { config.hosts[k] = dnsHosts[k].slice() })
   var bootstrapDns = ['https://223.5.5.5/dns-query', 'https://223.6.6.6/dns-query', 'https://8.8.8.8/dns-query', 'https://1.1.1.1/dns-query', '223.5.5.5']
   var domesticDoH = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query']
   var foreignDoH = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/dns-query']
@@ -2366,16 +1034,27 @@ function overwriteGeneral(config) {
   config.dns.nameserver = domesticDoH.slice()
   config.dns['direct-nameserver'] = domesticDoH.slice()
   // v5.4.19 #5 借鉴 Proxy-override：让 direct-nameserver 也遵循 nameserver-policy（默认 false 会忽略它）。
-  // 官方 use case 即"direct 用国内 DoH + policy 指定域名走指定 DNS"；本仓库 policy 仅含境外 CDN，零国内误伤。
+  // 官方 use case 即"direct 用国内 DoH + policy 指定域名走指定 DNS"；本仓库 policy 同时覆盖境外 CDN 与 geosite 级分流。
   config.dns['direct-nameserver-follow-policy'] = true
   config.dns['proxy-server-nameserver'] = proxyDoH.slice()
   config.dns.fallback = foreignDoH.slice()
-  if (!config.dns['nameserver-policy'] || typeof config.dns['nameserver-policy'] !== 'object' || Array.isArray(config.dns['nameserver-policy'])) {
-    config.dns['nameserver-policy'] = {}
-  }
+  // Global DNS policy is repository-owned.  Subscription hints are projected
+  // into proxy-server-nameserver-policy only, after exact node-domain filtering.
+  config.dns['nameserver-policy'] = {};
   ['+.jsdelivr.net', '+.github.com', '+.githubusercontent.com', '+.githubassets.com', '+.fastly.net'].forEach(function(host) {
     if (!config.dns['nameserver-policy'][host]) config.dns['nameserver-policy'][host] = foreignDoH.slice()
   })
+  // DNS-POLICY#170：nameserver-policy 优先于 nameserver/fallback。用 geosite 将国内域名固定到国内 DoH，
+  // 非国内域名固定到海外 DoH，避免先向国内递归 resolver 发起 geolocation-!cn 查询后再 fallback。
+  var geositeDnsPolicy = {
+    'geosite:cn': domesticDoH,
+    'geosite:geolocation-!cn': foreignDoH
+  }
+  Object.keys(geositeDnsPolicy).forEach(function(key) {
+    if (!config.dns['nameserver-policy'][key]) config.dns['nameserver-policy'][key] = geositeDnsPolicy[key].slice()
+  })
+  // Clear any source PSS policy before the adapter projects a profile-scoped snapshot.
+  delete config.dns['proxy-server-nameserver-policy']
   if (!config.dns['fallback-filter'] || typeof config.dns['fallback-filter'] !== 'object' || Array.isArray(config.dns['fallback-filter'])) {
     config.dns['fallback-filter'] = {}
   }
@@ -2419,6 +1098,24 @@ function overwriteGeneral(config) {
     '+.todesk.com', '+.oray.com', '+.sunlogin.com', '+.teamviewer.com', '+.anydesk.com',
     '+.battlenet.com.cn', '+.wotgame.cn', '+.wggames.cn', '+.wowsgame.cn',
     '+.mcdn.bilivideo.cn',
+    '+.pub.3gppnetwork.org',
+    '+.bing.com',
+    '+.n.n.srv.nintendo.net',
+    '+.stun.playstation.net',
+    '+.xboxlive.com',
+    'auth.docker.io',
+    'registry-1.docker.io',
+    'index.docker.io',
+    'hub.docker.com',
+    'production.cloudflare.docker.com',
+    '+.push.apple.com',
+    '+.courier.push.apple.com',
+    '+.miui.com',
+    '+.xiaomi.com',
+    '+.xiaomi.net',
+    '+.mijia.tech',
+    '+.gotui.com',
+    '+.miwifi.com',
   ]))
   // v5.4.22 #1 借鉴 Proxy-override：QUIC SNI 嗅探（对齐 CMFA/OpenClash）；force-dns-mapping 使真 IP QUIC（fake-ip-filter 域名如 mcdn.bilivideo.cn）也能 GEOSITE 匹配，避免被 NOT,((GEOSITE,cn)) 误拒。
   config.sniffer = {
@@ -2438,6 +1135,7 @@ function overwriteGeneral(config) {
   config.profile['store-selected'] = true
   config.profile['store-fake-ip'] = true
   config.profile['tracing'] = true
+  return SckiSubscriptionAdapter.applyNodeDns(config, nodeDnsHints, SCKI_SUBSCRIPTION_ADAPTER_PROFILE)
 }
 
 function uniqList(list) {
@@ -2545,17 +1243,20 @@ function main(config) {
     log(`[${VERSION}] Start processing, ${config.proxies.length} proxies`)
     if (!Array.isArray(config['proxy-groups'])) config['proxy-groups'] = []
     if (!Array.isArray(config.rules)) config.rules = []
-    overwriteGeneral(config)
+    var activeNodeServers = collectActiveSubscriptionNodeServers(config.proxies)
+    var nodeDnsHints = SckiSubscriptionAdapter.captureNodeDns(config, activeNodeServers, SCKI_SUBSCRIPTION_ADAPTER_PROFILE)
+    var nodeDnsReport = overwriteGeneral(config, nodeDnsHints)
+    logSubscriptionAdapterReport(nodeDnsReport)
     cleanupSubscription(config)
     injectSmartFingerprint(config)
     var c = classifyAllNodes(config.proxies)
-    log(`[${VERSION}] Classification: ALL=${c.ALL.length} HOME_ALL=${c.HOME_ALL.length} HK=${c.HK.length}/${c.HOME_HK.length} TW=${c.TW.length}/${c.HOME_TW.length} CN=${c.CN.length}/${c.HOME_CN.length} JP=${c.JP.length}/${c.HOME_JP.length} KR=${c.KR.length}/${c.HOME_KR.length} SG=${c.SG.length}/${c.HOME_SG.length} US=${c.US.length}/${c.HOME_US.length} EU=${c.EU.length}/${c.HOME_EU.length} AM=${c.AM.length}/${c.HOME_AM.length} AF=${c.AF.length}/${c.HOME_AF.length} OTHER=${c.OTHER.length}/${c.HOME_OTHER.length}`)
+    log(`[${VERSION}] Classification: ALL=${c.ALL.length} HOME_ALL=${c.HOME_ALL.length} HK=${c.HK.length}/${c.HOME_HK.length} TW=${c.TW.length}/${c.HOME_TW.length} CN=${c.CN.length}/${c.HOME_CN.length} JP=${c.JP.length}/${c.HOME_JP.length} KR=${c.KR.length}/${c.HOME_KR.length} SG=${c.SG.length}/${c.HOME_SG.length} US=${c.US.length}/${c.HOME_US.length} EU=${c.EU.length}/${c.HOME_EU.length} AM=${c.AM.length}/${c.HOME_AM.length} AF=${c.AF.length}/${c.HOME_AF.length} APAC_OTHER=${c.APAC_OTHER.length}/${c.HOME_APAC_OTHER.length} OTHER=${c.OTHER.length}/${c.HOME_OTHER.length}`)
     var jpkrNodes = c.JP.concat(c.KR)
     // v5.4.1 FIX: SG 同时存在于狮城组（独立）和亚太组（对标 US 在 美洲组）
-    var apacNodes = c.HK.concat(c.TW, c.CN, c.JP, c.KR, c.SG)
+    var apacNodes = c.HK.concat(c.TW, c.CN, c.JP, c.KR, c.SG, c.APAC_OTHER)
     var americasNodes = c.US.concat(c.AM)
     var homeJpkrNodes = c.HOME_JP.concat(c.HOME_KR)
-    var homeApacNodes = c.HOME_HK.concat(c.HOME_TW, c.HOME_CN, c.HOME_JP, c.HOME_KR, c.HOME_SG)
+    var homeApacNodes = c.HOME_HK.concat(c.HOME_TW, c.HOME_CN, c.HOME_JP, c.HOME_KR, c.HOME_SG, c.HOME_APAC_OTHER)
     var homeAmericasNodes = c.HOME_US.concat(c.HOME_AM)
     upsertUrlTestGroup(config, SMART.GLOBAL, c.ALL)
     if (c.HOME_ALL.length > 0) upsertUrlTestGroup(config, SMART.GLOBAL_HOME, c.HOME_ALL)
@@ -2588,8 +1289,7 @@ function main(config) {
     log(`[${VERSION}] Active url-test region groups: ${[...activeSmartNames].filter(function(n) { return n !== 'DIRECT' && n !== 'REJECT' }).join(', ')}`)
 
     injectBusinessGroups(config, activeSmartNames)
-    injectRuleProviders(config)
-    injectRules(config)
+    applyMihomoFusedRuleSets(config)
     sortProxyGroups(config)
     log(`[${VERSION}] Done! Groups: ${config['proxy-groups'].length}, Rules: ${config.rules.length}, Providers: ${Object.keys(config['rule-providers']).length}`)
     return config

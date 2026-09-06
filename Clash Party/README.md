@@ -3,16 +3,20 @@
 > 目录简介：这里是 Mihomo Smart/Normal 覆写脚本的事实基线，面向 Clash Party、Clash Verge Rev、Mihomo Party 等桌面客户端。
 >
 > 覆写脚本：**两份二选一**，规则 100% 等价，仅 22 区域组（11 全部 + 11 家宽）的内核选路算法不同
-> - `ClashParty(mihomo-smart).js`（**v5.4.22**，2026-05-31）— Smart 内核 + LightGBM ML 评估
-> - `ClashParty(mihomo).js`（**v5.4.22-normal.1**，2026-05-31）— 普通内核 url-test 延迟选路
+> - `ClashParty(mihomo-smart).js`（**v6.0.13-dns.6**，2026-09-03）— Smart 内核 + LightGBM ML 评估
+> - `ClashParty(mihomo).js`（**v6.0.13-normal.7**，2026-09-03）— 普通内核 url-test 延迟选路
 >
 > UI 补充配置：已整合到本文「四、粘贴 UI 补充配置」章节
-> 架构：**SUB-STORE 多机场融合** + 22 区域组（11 全部 + 11 家宽）+ 32 业务策略组 + **385 rule-providers**
+> 架构：**SUB-STORE 多机场融合** + 22 区域组（11 全部 + 11 家宽）+ 33 业务策略组 + **132 融合 rule-providers / 151 rules**（源 514 providers / 973 rules）
 > 适用客户端：
 > - **Mihomo Party**（桌面端，推荐，原生支持 JS 覆写；内置 Smart 内核）
 > - **Clash Verge Rev**（桌面端，支持 JS/YAML 双覆写）
 > - **Clash Nyanpasu**（桌面端）
 > - 任何支持 Mihomo **JavaScript 覆写引擎**的客户端
+
+> 私有节点 DNS：覆写默认采用 `adaptive` 受限投影；可用 `off / policy / adaptive` 三档控制订阅 DNS 的投影深度，不会改变 55 组、规则或全局业务 DNS。若你另行粘贴 DNS UI 配置，请合并而不要覆盖这些字段。完整边界与静态端示例见 [私有节点 DNS 指南](../docs/private-node-dns.md)。
+
+> 节点命名兼容：yun hk01 / yun us01 / yun jp01 / yun sg01 / yun tw01 这类小写 ISO 两位码加编号可正常归类。仅此形式放宽大小写，普通文本中的 us / in 不会被误判为地区。
 
 <sub>💖 [支持本项目](../docs/donate.md) · ⭐ [Star](https://github.com/ivansolis1989/Smart-Config-Kit) · 🐛 [Issue](https://github.com/ivansolis1989/Smart-Config-Kit/issues)</sub>
 
@@ -72,19 +76,19 @@
 
 ### 跑起来之后怎么验证成功？
 - 浏览器打开 `https://www.google.com`，能打开说明代理通了。
-- 客户端左侧「代理」页面最多会看到 **54 个代理组**（22 区域 + 32 业务；空区域会自动不建组）。
+- 客户端左侧「代理」页面最多会看到 **55 个代理组**（22 区域 + 33 业务；空区域会自动不建组）。
 - 左侧「连接」页面可以看每条请求走了哪个组/哪个节点。
 - 额外检查：按根 README 的 [导入后 60 秒验证清单](../README.md#-导入后-60-秒验证清单) 确认规则下载、GEOSITE 命中与 anti-ad 误伤白名单。
 
 ### 最常见的第一次踩坑
 - ❌ **订阅链接格式不对**：有些机场默认给的是 V2ray 格式。换链接时加 `?flag=clash.meta` 或 `?flag=meta` 后缀。
-- ❌ **首次下载 rule-provider 卡住**：脚本会下载 385 条规则源，约 15–30 MB。**必须在 WiFi 环境 + 已连接代理**（先连一个简单节点，再启动覆写），否则 GitHub/jsdelivr 在国内直连会 404。
+- ❌ **首次下载 rule-provider 卡住**：脚本会下载融合后的规则源。**必须在 WiFi 环境 + 已连接代理**（先连一个简单节点，再启动覆写），否则 GitHub/jsdelivr 在国内直连会 404。
 - ❌ **LightGBM 模型没下载**（仅 Smart 版）：启动后若日志有 `Model.bin not found`，手动下 https://github.com/vernesong/mihomo/releases/download/LightGBM-Model/Model.bin 放到客户端的 mihomo 工作目录；或直接换成**普通版**脚本，不依赖 `Model.bin`。
 - ❌ **Smart 版提示内核不支持 `type: smart`**：你用的不是 mihomo Alpha。要么换内核（Clash Verge Rev → 设置 → Clash 内核 → Mihomo Alpha），要么直接改用**普通版**脚本。
 - ❌ **找不到业务组 / 区域组**：确认订阅返回的是 Mihomo / Clash.Meta 格式（不是 Surge / Quantumult）。
-- ❌ **RustDesk 仍然超时**：v5.4.12 后 RustDesk 应命中 `🧑‍💼 会议协作`，不要让该组停在 `DIRECT`；DNS 段应采用 v5.4.17 split-bootstrap（default 纯 IP，其它 resolver 全 DoH），并且 `fake-ip-filter` 应包含 `+.rustdesk.com` 真实 IP 回应。
+- ❌ **RustDesk 仍然超时**：RustDesk 应命中 `🧑‍💼 会议协作`，不要让该组停在 `DIRECT`；DNS 段应采用本文第四章的 split-bootstrap / DoH 配置，并且 `fake-ip-filter` 应包含 `+.rustdesk.com` 真实 IP 回应。
 - ❌ **WebRTC / STUN 测出代理出口或失败**：v5.4.13 后标准 STUN/TURN 端口 `3478 / 3479 / 5349 / 19302 / 19305 / 19307` 应直连；若服务强制走 UDP/443 TURN，仍会受 QUIC 屏蔽策略影响。
-- ⚙️ **QUIC 精细化（v5.4.22 默认开，如何关闭）**：仅放行 YouTube/Google/微软/苹果 的 QUIC（UDP/443）走对应业务组，其余海外 QUIC 一律 `REJECT` 强制回退 HTTP/2（配合 `config.sniffer` 嗅探 SNI 做 GEOSITE 匹配）。**若某海外小众 App 必须用 QUIC 且无法回退 TCP 而断连**：在 `injectRules` 中删除/注释那 5 条 `AND,((DST-PORT,443),(NETWORK,UDP),...)` 规则即可恢复全量 QUIC 透传；只想恢复一部分则保留白名单豁免行、删掉末条 `...,(NOT,((GEOSITE,cn)))),REJECT` 即可。
+- ⚙️ **QUIC 精细化**：仅放行 YouTube/Google/微软/苹果 的 QUIC（UDP/443）走对应业务组，其余海外 QUIC 一律 `REJECT` 强制回退 HTTP/2（配合 `config.sniffer` 嗅探 SNI 做 GEOSITE 匹配）。**若某海外小众 App 必须用 QUIC 且无法回退 TCP 而断连**：在 `injectRules` 中删除/注释那 5 条 `AND,((DST-PORT,443),(NETWORK,UDP),...)` 规则即可恢复全量 QUIC 透传；只想恢复一部分则保留白名单豁免行、删掉末条 `...,(NOT,((GEOSITE,cn)))),REJECT` 即可。
 
 ---
 
@@ -173,7 +177,7 @@ Clash Party 系列（Mihomo Party / Clash Verge Rev / Clash Nyanpasu）底层都
 
 1. 左侧菜单 → **覆写（Override）** → 右上角 ➕。
 2. 类型选择 **JavaScript（.js）**。
-3. 名称：`Clash Smart v5.4.12` 或 `Clash Normal v5.4.12`（根据你粘贴的那份）。
+3. 名称：`Clash Smart` 或 `Clash Normal`（根据你粘贴的那份）。
 4. 内容：复制 `Clash Party/ClashParty(mihomo-smart).js` **或** `Clash Party/ClashParty(mihomo).js` 的**全文**粘贴进去（两份脚本都在 2200+ 行左右）。
 5. 保存。
 6. 返回「订阅」页面，右键你的订阅 → **编辑** → **启用覆写** → 勾选刚才的脚本 → 保存（**只勾一份**，不要同时启用）。
@@ -190,7 +194,7 @@ Clash Party 系列（Mihomo Party / Clash Verge Rev / Clash Nyanpasu）底层都
 
 ## 四、粘贴 UI 补充配置
 
-脚本会写入 **proxies / proxy-groups / rules / DNS** 主体配置；但不同 GUI 仍可能用 UI Mixin 覆盖 DNS / Sniffer / GeoX URL。为避免客户端侧覆盖掉 v5.4.17 DNS 合同，建议把下方内容同步粘贴到客户端的 **外部数据、DNS、嗅探覆写中**：
+脚本会写入 **proxies / proxy-groups / rules / DNS** 主体配置；但不同 GUI 仍可能用 UI Mixin 覆盖 DNS / Sniffer / GeoX URL。为避免客户端侧覆盖掉当前 DNS 合同，建议把下方内容同步粘贴到客户端的 **外部数据、DNS、嗅探覆写中**：
 
 GeoX URL：
 
@@ -211,16 +215,45 @@ DNS：
 <img width="811" height="698" alt="image" src="https://github.com/user-attachments/assets/d2cbbbb3-ed2c-45d7-86cc-832edfbdb365" />
 
 ```yaml
+hosts:
+  dns.alidns.com: [223.5.5.5, 223.6.6.6]
+  doh.pub: [119.29.29.29]
+  dns.google: [8.8.8.8, 8.8.4.4]
+  cloudflare-dns.com: [1.1.1.1, 1.0.0.1]
+
 dns:
-  use-hosts: false
+  use-hosts: true
   use-system-hosts: false
   respect-rules: true
   prefer-h3: false
   default-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://223.6.6.6/dns-query
+    - https://8.8.8.8/dns-query
+    - https://1.1.1.1/dns-query
     - 223.5.5.5
-    - 119.29.29.29
-    - 1.1.1.1
-    - 8.8.8.8
+  nameserver-policy:
+    geosite:cn:
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
+    geosite:geolocation-!cn:
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
+    '+.jsdelivr.net':
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
+    '+.github.com':
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
+    '+.githubusercontent.com':
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
+    '+.githubassets.com':
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
+    '+.fastly.net':
+      - https://cloudflare-dns.com/dns-query
+      - https://dns.google/dns-query
   nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
@@ -232,6 +265,7 @@ dns:
   direct-nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
   fallback:
     - https://cloudflare-dns.com/dns-query
     - https://dns.google/dns-query
@@ -275,6 +309,21 @@ sniffer:
         - "443"
         - "8443"
         - "4433"
+  skip-domain:
+    - +.push.apple.com
+  skip-dst-address:
+    - 91.105.192.0/23
+    - 91.108.4.0/22
+    - 91.108.8.0/21
+    - 91.108.16.0/21
+    - 91.108.56.0/22
+    - 95.161.64.0/20
+    - 149.154.160.0/20
+    - 185.76.151.0/24
+    - 2001:67c:4e8::/48
+    - 2001:b28:f23c::/47
+    - 2001:b28:f23f::/48
+    - 2a0a:f280:203::/48
 ```
 
 ---
@@ -286,7 +335,7 @@ sniffer:
 1. **代理组（Proxies）页面**
    - 应看到 **22 区域组**（🌍 全球 / 🏡 全球家宽 / 🇭🇰 香港 / 🏡 香港家宽 / 🇹🇼 台湾 / 🏡 台湾家宽 / 🇸🇬 狮城 / 🏡 狮城家宽 / 🇯🇵 日韩 / 🏡 日韩家宽 / 🌏 亚太 / 🏡 亚太家宽 / 🇺🇸 美国 / 🏡 美国家宽 / 🇪🇺 欧洲 / 🏡 欧洲家宽 / 🌎 美洲 / 🏡 美洲家宽 / 🌍 非洲 / 🏡 非洲家宽 / 🌏 其他 / 🏡 其他家宽），Smart 版显示为 `smart`，普通版显示为 `url-test`；
    - 每个区域组下方有对应地区的所有节点；
-   - **31 个业务策略组**（AI 服务、加密货币、Netflix、Disney+、YouTube、Telegram 等）可正常选择。
+   - **33 个业务策略组**（AI 服务、加密货币、TikTok、Netflix、Disney+、YouTube、Telegram 等）可正常选择。
 
 2. **连接（Connections）页面**
    - 访问 `https://chat.openai.com`：Rule 应命中「🤖 AI 服务 → 🇺🇸 美国节点 → 某个 US 节点」；
@@ -294,8 +343,8 @@ sniffer:
    - 访问 `https://www.bilibili.com`：应命中「📺 国内流媒体 / DIRECT」。
 
 3. **规则（Rules）页面**
-   - 总规则数应 ≥ **963 条**；
-   - `rule-providers` 数量 ≥ **373**。
+   - 总规则数应 ≥ **1000 条**；
+   - `rule-providers` 数量应为 **113**。
 
 4. **日志（Logs）页面**
    - 无 `parse error` / `list not found`；
@@ -303,23 +352,7 @@ sniffer:
 
 ---
 
-## 六、版本亮点（v5.2.2，2026-04-13）
-
-- **FIX#17-P0**：`jsdelivr CDN` 永久直连
-  - `RP_PROXY` 从「云与CDN」改为「受限网站（GFW）」组
-  - 解决 04-06 单日 **4,931 条** jsdelivr 失败的 DNS 循环依赖问题
-  - 在印尼选 `DIRECT`，在中国选代理，灵活切换
-- **FIX#18-P1**：删除已死的 `ckrvxr` 规则源
-  - 移除 AntiPCDN / AntiAntiFraud（累计 221 次 404）
-- **FIX#19-P1**：`DST-PORT,7680,REJECT` 顺序修复
-  - 提前到 `GEOIP,private` 之前，确保 Windows Delivery Optimization 流量被正确拦截
-- **FIX#20-P2**：PI.ai 移入「🚫 受限网站（GFW）」组
-- **FIX#20-P2**：`GSCService.exe` 加入 TUN `exclude-process`（避免 fake-ip 下 `ip.cip.cc` DNS 解析失败）
-- **NOTE#2**：`BBC.yaml / Snap.yaml` 的 `USER-AGENT` warning 为无害提示，已由 `metaDomain('tiktok')` 独立覆盖
-
----
-
-## 七、业务组推荐配置
+## 六、业务组推荐配置
 
 建议首次导入后，按以下方式为每个业务组「指定首选」：
 
@@ -336,20 +369,21 @@ sniffer:
 | 🇭🇰 香港流媒体 | 🇭🇰 香港节点 |
 | 🇹🇼 台湾流媒体 | 🇹🇼 台湾节点 |
 | 🎮 游戏平台 | 🇯🇵 日韩节点（Steam/PSN） |
+| 🔍 Google 服务 | 🌍 全球节点 |
 | 🔧 工具与服务 | 🌍 全球节点 |
 | 🚫 受限网站（GFW） | 中国选代理 / 海外选 DIRECT |
 
 ---
 
-## 八、常见问题
+## 七、常见问题
 
 ### Q1：启用脚本后节点为空 / 区域组为空？
 - 确认订阅返回的是 **Mihomo / Clash.Meta** 格式（不是 Surge / Quantumult）。
-- 确认机场节点名带有地区关键字（香港/HK/🇭🇰/hkg 至少其一）。
+- 确认机场节点名带有地区关键字（香港/HK/🇭🇰/hkg 至少其一；hk01 这类小写地区码加编号也支持）。
 - 打开日志，查看是否有 `No node classified` 提示。
 
 ### Q2：首次连接特别慢？
-- 首次需下载 **385 rule-providers**，约 15–30 MB；
+- 首次需下载 **113 个融合 rule-providers**（Mihomo 优先 `.mrs`），体积显著低于展开源规则；
 - 建议在 WiFi 环境下完成首次下载。
 
 ### Q3：如何升级到新版本？
@@ -373,7 +407,7 @@ sniffer:
 
 ---
 
-## 九、目录一览
+## 八、目录一览
 
 | 文件 | 用途 |
 |------|------|
@@ -384,7 +418,7 @@ sniffer:
 
 ---
 
-## 十、致谢
+## 九、致谢
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) - Smart 内核
 - [mihomo-party-org/mihomo-party](https://github.com/mihomo-party-org/mihomo-party) - 桌面客户端

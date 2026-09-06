@@ -7,6 +7,139 @@
 
 ---
 
+## v6.0.13-v2n.4 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：Xray fallback 的第 013 RuleObject 增加 `domain:linuxdo.org` 并保持 direct 国内语义；`linux.do` 仍在第 059 proxy 规则。
+- SYNC：产物保持 69 个非空融合段 + 19 条可表达内联规则 + 1 条元数据，共 89 条 RuleObject。
+
+## v6.0.12-v2n.3 (2026-09-01)
+
+- FIX#181-PC：Xray fallback 从首段 fused JSON 重建，`login.nvidia.cn` 在 NVIDIA 下载段之前命中 `direct`。
+- SYNC：当前产物为 69 个非空融合段 + 19 条可表达内联规则 + 1 条元数据，共 89 条 RuleObject。
+
+## v6.0.11-v2n.2 (2026-08-22)
+
+- Xray fallback 从最终 69 个 fused sing-box 段展平为 89 条 RuleObject；Gemini 与 Accademia Gemini 段改为 proxy Google 语义，未移动 szkane AI 段。
+
+## v6.0.10-v2n.2 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：Xray fallback 从首段 fused sing-box JSON 重建；两个网易游戏服务主机在国内游戏段之前以 `direct` 出站匹配。
+
+## v6.0.9-v2n.1 (2026-07-19)
+
+- Xray fallback 增加两条可表达的 `process + domain` RuleObject：仅 `Code Helper` / `Code Helper (Plugin)` 访问 `api.github.com` 时保持 proxy AI 语义；通用 GitHub API 段先于上游广义 AI 段。
+- SYNC：重建为 86 条 RuleObject（1 meta + 66 fused + 19 inline）。
+
+## v6.0.8-v2n.1 (2026-07-15)
+
+- 从更新后的融合 sing-box 源重新展平，保持国内权威段先于通用国际兜底的等价顺序。
+
+## v6.0.7-v2n.1 (2026-07-14)
+
+- FIX#176：Xray fallback 从后置国际 SRS 段重生成，国内域名 RuleObject 在共享 CDN / GeoIP 的 proxy fallback 前命中 direct。
+
+## v6.0.6-v2n.1 (2026-07-14)
+
+- DIRECT-WORKPRO-WEB：Xray fallback 重新生成，默认 direct RuleObject 的 `process` 同时包含 `WorkPro.exe` 和 `WorkProWebProcess.exe`；仅在本机 Windows / Linux 的进程匹配路径生效。
+
+## v6.0.5-v2n.1 (2026-07-14)
+
+- DIRECT-WORKPRO：Xray fallback 重建为 process 包含 WorkPro.exe 且 outboundTag 为 direct；仅在本机 Windows / Linux 的 Xray 进程匹配路径生效。
+
+## v6.0.4-v2n.1 (2026-07-13)
+
+- DIRECT-ITWDB：Xray fallback 由 fused sing-box JSON 重建，默认 direct RuleObject 包含 `domain:itwdb.com`，覆盖 WorkPro 子域名。
+
+## v6.0.3-v2n.1 (2026-07-12)
+
+- SYNC：从 65 个非空 fused sing-box JSON 重新展平为 83 条 Xray RuleObject（1 meta + 65 fused + 17 inline），保持 `proxy/direct/block` 三出站与首匹配顺序。
+- AI-PRECEDENCE：新增的 AI telemetry guard 在广告与国外网站 fallback 之前生效；Xray 路径不直接下载或调用任何上游规则集。
+
+## v6.0.2-v2n.1 (2026-07-10)
+
+- SYNC：从 64 个 v6.0.2 非空 fused sing-box JSON 重新展平为 82 条 Xray RuleObject（1 meta + 64 fused + 17 inline），保持 `proxy/direct/block` 三出站。
+- PERF：Xray fallback 继承编译目标内的 GEOIP/ASN CIDR 物化和同策略去重，不加载任何原始上游 rule-provider。
+
+## v6.0.1-v2n.1 (2026-07-10)
+
+- SYNC：Xray fallback 由最新 fused sing-box JSON 重新展平，保留 86 条原生 Xray RuleObject、`proxy/direct/block` 三出站和既有优先级。
+- DELIVERY：Xray JSON 不远程加载 Issue #174 所涉的文本规则集；其版本同步用于保证 fallback 与 source graph v6.0.1 一致。
+
+## v6.0.0-v2n.2 (2026-07-09)
+
+- FUSED-XRAY：`v2rayN(xray).json` 改由 `tools/generate-fused-fallback-artifacts.js` 从 `rulesets/generated/fused/sing-box/*.json` 展平成原生 Xray RuleObject。
+- SCOPE：Xray 没有远程 `.srs` rule-set 路由字段，不能像 sing-box/Passwall 一样引用远程 fused `.srs`；本产物保留 `proxy/direct/block` 三出站，输出 1 条 meta、68 条 fused 段和 17 条端口/逻辑/MATCH 内联规则。
+
+## v6.0.0-v2n.1 (2026-07-09)
+
+- META：跟随 Clash Party v6.0.0 更新版本元数据。
+- SCOPE：Xray 路由 JSON 仍是 proxy/direct/block 三出站降级展平参考，不承载融合 rule-set，不反向影响 Clash Party 基准。
+
+## v5.4.39-v2n.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Xray 路由 JSON 不消费 Mihomo `.mrs` rule-provider；mihomo / sing-box 路径分别复用 CMFA / SingBox 产物。
+
+## v5.4.38-v2n.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.38 更新版本元数据。
+- SCOPE：Xray JSON 继续使用展平规则，不直接引用 `rulesets/supplemental` URL。
+
+## v5.4.37-v2n.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Xray 路由 JSON 不承载 DNS 解析策略；mihomo / sing-box 路径分别复用 CMFA / SingBox 产物，本文件规则语义不变。
+
+## v5.4.36-v2n.1 (2026-06-29)
+
+- META#171-DIRECT：跟随 Clash Party v5.4.36 更新版本元数据。
+- Xray 产物不承载这 22 条 mihomo 直写规则，本产物规则语义不变。
+
+## v5.4.35-v2n.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：跟随 Clash Party v5.4.35 基线更新版本元数据。
+- N/A：Xray 路由 JSON 不消费 Mihomo rule-provider；本次清理不改变 40 条启用规则。
+
+## v5.4.34-v2n.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：新增 `scki-000e-amap-direct`，显式直连 `a-map.cn` / `amap.com` / `autonavi.com` / `gaode.com` 等高德地图 / AMap 核心域名。
+- 说明：v2rayN Xray 路由 JSON 不消费 Mihomo `rule-provider`，因此使用域名兜底与主线 `amap` provider 保持语义等价。
+
+## v5.4.33-v2n.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：Xray 降级参考在 `scki-010-ai` 补充 AI 编程工具域名兜底，覆盖 Augment / Amazon Q / Bolt / Continue / Devin / Kiro / Lovable / Replit / Sourcegraph / Tabnine / Windsurf / Zed 等。
+
+## v5.4.32-v2n.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：Xray 路由中的 `scki-025-cn-game` 补齐米哈游、网易、WeGame、完美世界、TapTap、鹰角、莉莉丝等国内游戏域名，并保持在国外游戏规则之前。
+- 元数据对齐 Clash Party v5.4.32；mihomo / sing-box 路径继续复用对应主产物。
+
+## v5.4.31-v2n.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：Xray 降级参考新增 `scki-000d-douyin-web-cnmedia`，将抖音 Web / `zjcdn.com` 视频 CDN 明确前置直连。
+- 元数据对齐 Clash Party v5.4.31；mihomo / sing-box 路径继续复用对应主产物。
+
+## v5.4.30-v2n.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：Xray 降级参考新增 `scki-027-google`，承载 `geosite:google` / `geoip:google` / `domain:scholar.google.com`。
+- 原搜索引擎参考拆为 `scki-027b-search`，仅保留 Bing / DuckDuckGo / Yandex 等非 Google 搜索。
+
+## v5.4.29-v2n.1 (2026-06-10)
+
+- N/A#165-LATENCY：v2rayN Xray 路由 JSON 不承载区域自动测速/健康检查字段；本轮仅元数据与 README 对齐 Clash Party v5.4.29。
+
+## v5.4.27-v2n.1 (2026-06-07)
+
+- 对齐基线 v5.4.27（CLEAN#165）。Xray 路由使用 `geosite:anthropic` / `geosite:paypal` / `geosite:hbo` / `geosite:hulu` / `geosite:xbox` 聚合项，未包含本轮可删除的直写域名；仅更新元数据版本。
+
+## v5.4.26-v2n.1 (2026-06-07)
+
+- 对齐基线 v5.4.26（FIX#164）。本产物**不受** `copilot.tencent.com` 误吞影响：Xray 路由 AI 类用 `geosite:copilot`（仅含微软/GitHub Copilot 精确域名，无 copilot 子串关键词），`copilot.tencent.com` 顺流到 `geosite:cn`（含 `tencent.com`）→ direct，无需规则改动。仅 bump 元数据版本。
+
+## v5.4.25-v2n.1 (2026-06-04)
+
+- ★ SYNC：Xray 路由 JSON 元数据对齐 Clash Party v5.4.25；业务/规则类别未变化，路由语义延续 v5.4.23-v2n.1。
+
 ## v5.4.23-v2n.1 (2026-06-02)
 
 - ★ FIX#161：`domain:zhimg.com` + `domain:zhihu.co` 加入 direct 路由规则（知乎图片 CDN + 短链，同步基线）。

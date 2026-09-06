@@ -5,7 +5,9 @@
 > 覆写脚本：`FlClash(mihomo).js`
 > 适用客户端：**FlClash**（Android / Windows / macOS / Linux）
 > 内核要求：FlClash >= **v0.8.85**
-> 当前版本：**v5.4.22-flclash.1**（22 url-test 区域组 + 32 业务策略组；含借鉴 Proxy-override 批 A+B+C+D：国内 SDK/CDN 直连 + fake-ip-filter 补全 + direct-nameserver-follow-policy + 节点过滤 junk 关键词补充 + QUIC 精细化 + DoH-over-IP bootstrap）
+> 当前版本：**v6.0.13-flclash.9**（22 url-test 区域组 + 33 业务策略组 + 132 融合 rule-providers / 151 rules；变更历史见 `FlClash/CHANGELOG.md`）
+>
+> 节点命名兼容：yun hk01 / yun us01 / yun jp01 / yun sg01 / yun tw01 等小写 ISO 两位码加编号会自动进入区域组；不对普通小写词做宽泛国家码匹配。
 
 <sub>💖 [支持本项目](../docs/donate.md) · ⭐ [Star](https://github.com/ivansolis1989/Smart-Config-Kit) · 🐛 [Issue](https://github.com/ivansolis1989/Smart-Config-Kit/issues)</sub>
 
@@ -23,7 +25,7 @@
 
 > ⚠️ **注意**：
 > 1. 必须先「创建」脚本再「关联」到订阅，只粘贴不关联不会生效
-> 2. 订阅转换器生成的配置可能导致兼容问题，建议使用机场**原生订阅链接**
+> 2. 单机场优先使用机场**原生订阅链接**。若要把多个机场合成为同一节点池，请按 [Sub-Store 多机场聚合教程](../SubStore/README.md) 输出一条 `Clash.Meta(mihomo)` URL，再将覆写关联到这一个 Profile；不要使用来历不明的通用转换器。
 
 ### 第 1 步：创建覆写脚本
 
@@ -33,7 +35,7 @@
 2. 点右上角 **+**
 3. 输入名称（如 `Smart分流`），选择加载方式：
    - **URL**：填入 `https://raw.githubusercontent.com/IvanSolis1989/Smart-Config-Kit/main/FlClash/FlClash%28mihomo%29.js`
-   - **jsdelivr CDN**（国内更快）：`https://cdn.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/FlClash/FlClash%28mihomo%29.js`
+   - **jsdelivr CDN**（备用，速度与可达性取决于网络）：`https://cdn.jsdelivr.net/gh/IvanSolis1989/Smart-Config-Kit@main/FlClash/FlClash%28mihomo%29.js`
    - **粘贴**：浏览器打开 Raw 链接，全选复制粘贴；第一行必须是 `// FlClash 覆写脚本`
 4. 保存
 
@@ -52,7 +54,7 @@
 
 点「代理」标签，应看到：
 - **最多 22 个区域组**（11 全部 + 11 家宽；空区域自动跳过）：🌍 全球节点、🇭🇰 香港节点、🇸🇬 狮城节点、🌏 其他节点……
-- **32 业务组**：🤖 AI 服务、🎵 TikTok、🎥 Netflix、📱 社交媒体……
+- **33 业务组**：🤖 AI 服务、🎵 TikTok、🎥 Netflix、📱 社交媒体……
 - 额外检查：按根 README 的 [导入后 60 秒验证清单](../README.md#-导入后-60-秒验证清单) 确认规则下载、GEOSITE 命中与 anti-ad 误伤白名单。
 
 ---
@@ -69,81 +71,74 @@
 
 ---
 
-## 必改配置（手动设置）
+## 应用层设置与 DNS 所有权
 
-导入脚本后，以下两项需要在 FlClash UI 手动设置：
+**关联本仓库脚本后，关闭「DNS 覆写」，不需要再向 UI 粘贴一份 DNS YAML。** 关闭的是 FlClash 的二次覆盖，不是 Mihomo DNS；脚本仍会设置 `dns.enable: true`、`respect-rules: true` 和国内/海外解析策略。
+
+订阅刷新时，脚本默认以 `adaptive` 模式投影活动节点 FQDN 所需的私有 resolver、精确 node policy 与 bootstrap hosts；`off / policy / adaptive` 只影响这层投影，不影响业务组、规则或全局业务 DNS。应用层重新覆盖 DNS 会破坏这一配置来源边界。完整说明见 [私有节点 DNS 指南](../docs/private-node-dns.md)。
+
+### Android 网络设置
+
+- 「VPN」：开启；运行模式使用「规则」。
+- VPN 分组下的「系统代理」：关闭（`vpnProps.systemProxy`）。它是在 VPN 网络上额外发布 HTTP 代理，**不会关闭 TUN，也不是“仅代理”模式**；使用应用访问控制时尤其不应同时开启。
+- Android VPN 的 IPv6：关闭（`vpnProps.ipv6`）。
+- 核心/进阶配置的 IPv6：也关闭（`patchClashConfig.ipv6`）。这是独立位置，App 会在脚本运行后把它写回顶层 `ipv6`，不能只关闭 VPN IPv6 或只依赖脚本。
+- 「DNS 劫持」：开启；「路由模式」选择「使用配置」。
+- 「DNS 覆写」：关闭；保留脚本 DNS 的 `prefer-h3: false`、`ipv6: false`。
+- 「追加系统 DNS」：关闭（备份字段 `networkProps.appendSystemDns`）。它独立于 DNS 覆写，开启后仍会向最终 `nameserver` 加入 `system://`。
+
+应用访问控制有两种不同用法，请保留自己需要的那一种：
+
+| 目标 | 设置与后果 |
+|---|---|
+| 全部 APP 交给 Mihomo 按域名分流 | 关闭应用访问控制；关闭“允许应用绕过 VPN”。国内组选择 `DIRECT`，国外组选择可用节点。 |
+| 国内 APP 完全不进入 VPN | 启用应用访问控制并排除这些 APP；保留排除名单，关闭 VPN“系统代理”。排除 APP 的连接和 DNS 不受脚本控制，也不应以 Mihomo 日志缺失判定它们无网络请求。 |
+
+[Android 官方说明](https://developer.android.com/reference/android/net/VpnService.Builder#setHttpProxy(android.net.ProxyInfo)) 明确指出：使用 HTTP 代理的 APP 无法区分 VPN 内外的路由，分流 VPN 与 HTTP 代理组合可能无法正常联网。这个风险与广告规则是否误拦是两回事；只有实际连接日志才能确认具体 APP 走了哪条路径。
+
+改完设置应**停止再启动 VPN，并彻底退出后重开受影响 APP**。不要只刷新节点列表；已建立的连接、系统代理设置和 DNS 缓存可能仍沿用旧状态。
+
+### 为什么开启「DNS 覆写」会导致脚本失效？
+
+FlClash 在脚本运行后还会合并应用层配置。开启 `overrideDns` 时，UI 的 `patchClashConfig.dns` 会**整体替换**脚本 DNS，并重新构建 `nameserver-policy`。v0.8.96 的 UI DNS 模型还不支持 `proxy-server-nameserver-policy`、`direct-nameserver`、`direct-nameserver-follow-policy`，因此把完整 YAML 粘贴进 UI 也不能保留这些字段。UI 保存值与脚本不一致时，还会重新打开 PreferH3/IPv6、替换解析器与过滤列表。脚本更新或显示正确版本并不能证明最终 DNS 正确。
+
+检查最终送入核心的配置，而不是只看 UI 中保存的 DNS 表单：
+
+- 顶层 `ipv6: false`；`dns.enable: true`；`dns.ipv6: false`；`dns.prefer-h3: false`。
+- `dns.respect-rules: true`，且 `proxy-server-nameserver` 非空。
+- `nameserver-policy` 同时包含 `geosite:cn` 与 `geosite:geolocation-!cn`；有私有节点时保留脚本生成的精确 `proxy-server-nameserver-policy`。
+- `direct-nameserver` 保持国内 DoH；不要为了 DNS 检测页面把国内 APP 的解析全部搬到海外。
+- `nameserver` 不含应用层追加的 `system://`；顶层 hosts 的同名 UI 覆写也应检查，不能只看 DNS 开关。
+
+`overrideDns: false` 时，UI 仍可能显示以前保存的 PreferH3/DNS 参数，它们不是当前脚本 DNS 的生效证明。具体合并顺序和版本边界见 [官方源码核对](./REFERENCE-flclash.md)。
+
+### DNS 检测出现 China server 是否就是泄漏？
+
+不能只凭国家标签判断。国内域名使用 AliDNS/DNSPod 是本仓库的默认策略；DNS 检测站的随机域名也可能没有收录在 `geolocation-!cn`，从而落到默认国内 `nameserver`。`fallback` 不代表查询从未发送给国内解析器，DoH 加密也不代表境外出口。
+
+另一方面，不能把这些现象一概当成“没有泄漏”：若你的目标是让所有代理业务域名只向境外解析器查询，当前通用基线并不提供这一保证。排除 VPN 的 APP、浏览器自带安全 DNS、系统 DNS 和节点 bootstrap 还各有独立路径。检测时应记录具体查询域名、命中策略、递归服务器及出站；“页面出现 China”不足以区分这些情况。
+
+需要“未分类域名也只用海外 DoH”的高级用户，可以在**本地脚本的 `overwriteGeneral` 函数**里将 `config.dns.nameserver = domesticDoH.slice()` 改成 `config.dns.nameserver = foreignDoH.slice()`，但保留 `geosite:cn`、国内 `direct-nameserver` 和节点解析器。此选项会让未分类查询依赖海外路径，应单独测试，且仍不承诺整机零泄漏。不要只填字符串 `foreignDoH` 到 UI，也不要删除国内 DNS 策略。
 
 ### 外部资源（GeoX URL）
-工具 → 资源 ⋮ → 编辑 → 同步：
-```yaml
-geox-url:
-  geoip: https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/geoip.dat
-  mmdb: https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/Country.mmdb
-  asn: https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/GeoLite2-ASN.mmdb
-  geosite: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
-geo-auto-update: true
-```
 
-### 进阶配置（DNS）
-工具 → 进阶配置 ⋮ → DNS：
-```yaml
-dns:
-  use-hosts: false
-  use-system-hosts: false
-  respect-rules: true
-  prefer-h3: false
-  default-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-    - 1.1.1.1
-    - 8.8.8.8
-  nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  proxy-server-nameserver:
-    - https://cloudflare-dns.com/dns-query
-    - https://dns.google/dns-query
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  direct-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  fallback:
-    - https://cloudflare-dns.com/dns-query
-    - https://dns.google/dns-query
-  fake-ip-filter:
-    - +.stun.*.*
-    - +.stun.*.*.*
-    - +.turn.*.*
-    - +.turn.*.*.*
-    - stun.l.google.com
-    - stun1.l.google.com
-    - stun2.l.google.com
-    - stun3.l.google.com
-    - stun4.l.google.com
-    - global.turn.twilio.com
-    - +.rustdesk.com
-  fallback-filter:
-    geoip: true
-    geoip-code: CN
-    geosite:
-      - gfw
-      - geolocation-!cn
-    ipcidr:
-      - 240.0.0.0/4
-      - 0.0.0.0/32
-      - 127.0.0.0/8
-      - 10.0.0.0/8
-      - 192.168.0.0/16
-    domain: []
-```
+**优先保留 FlClash 默认 URL，不要求换成 jsdelivr。** 资源下载有独立的应用层路径；脚本中的 rule-provider 下载代理不保证覆盖资源页面。GitHub、Raw、jsdelivr 在不同网络下的可达性不同，没有一个固定 CDN 保证更快。
+
+需要更换时，在资源页逐项检查完整 URL、HTTP 状态、下载大小和核心加载结果；先保留可用缓存，不要为了排障删除全部 GeoX 文件。`geosite:cn` / `geolocation-!cn` DNS 策略仍依赖 GeoSite 数据，即使路由已使用 fused MRS，也不能认为 GeoSite 完全不用了。当前内核关于 `fallback-filter.geosite` 的迁移 warning 不等于资源加载失败或 APP 被拒绝。
+
+### 国内 APP 无法联网时的最短排查
+
+1. 关闭 DNS 覆写、“追加系统 DNS”与 VPN“系统代理”；分别关闭 VPN IPv6 和核心/进阶配置 IPv6（`vpnProps.ipv6`、`patchClashConfig.ipv6`）。保留原应用访问控制名单，重启 VPN 和 APP。
+2. 对仍进入 VPN 的 APP，检查「国内网站」「国内流媒体」「国内游戏」是否选择 `DIRECT`。人在境外时保存的选组不会因为回国自动重置。
+3. 记录一次失败操作的具体时间、域名、规则、出站和错误；FlClash 自身 `checkIp` 的 502 只是出口信息服务错误，不能证明其他 APP 或所有节点不可用。
+4. 仅当失败业务域名明确命中广告拦截时，才临时将广告组切到 `DIRECT` 做对照，随后恢复。不要长期关闭全部广告规则，也不要对整个 APP 的域名族做无证据白名单。
 
 ---
 
 ## 常见问题
 
 ### Q: 代理/规则标签消失了？
-可能是订阅转换器生成的配置不兼容。试试用机场的**原生订阅链接**（不经转换器）。
+单机场先试机场的**原生订阅链接**（不经转换器）。若实际需求是多个机场合并为同一节点池，请按 [Sub-Store 多机场聚合教程](../SubStore/README.md) 输出一条 `Clash.Meta(mihomo)` URL，再关联覆写脚本；不要使用来历不明的通用转换器。
 
 ### Q: 区域组为什么是 url-test 不是 smart？
 FlClash 内核是标准 Mihomo，不支持 `type: smart` + LightGBM。

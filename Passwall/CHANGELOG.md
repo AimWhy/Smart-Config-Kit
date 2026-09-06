@@ -2,10 +2,149 @@
 
 > `Passwall/` 目录的变更日志（Passwall 全功能版专属参考；四列表 + shunt_rules + ACL 三层架构）。
 > 与 `Passwall2/` 目录（精简分流版参考）内容互通——两者共用 `shunt_rules.lua` 解析器，同一份 `.list` 互通。
-> 本目录提供把 Clash Party 两层结构（业务组 → 区域组）**手工展平**为 32 条 shunt rule 的降级参考。
+> 本目录提供从 `rulesets/generated/fused/sing-box/*.srs` 生成的 69 条非空原生 fused shunt rule 降级参考。
 > 主版本号跟随 Clash Party 主线；尾段 `-pw.N` 独立递增。
 
 ---
+
+## v6.0.13-pw.4 (2026-09-03)
+
+- FIX-LINUXDO-CN-ROUTE：第 013 fused SRS shunt rule 增加 `linuxdo.org` 后缀并保持 direct 国内语义；`linux.do` 保持第 059 proxy 语义。
+- SYNC：继续发布 69 条非空 shunt rule，发布缓存键升级为 `v6.0.13`。
+
+## v6.0.12-pw.3 (2026-09-01)
+
+- FIX#181-PC：重建首段 fused SRS shunt rule，`login.nvidia.cn` 由 `direct` 优先处理；其余 NVIDIA 域名保持下载组语义。
+- SYNC：继续发布 69 条非空 shunt rule，发布缓存键升级为 `v6.0.12`。
+
+## v6.0.11-pw.2 (2026-08-22)
+
+- 69 条 fused SRS shunt rule 从最终 manifest 重建；Gemini 与 Accademia Gemini 段改走 Google 语义，szkane AI 段及顺序保持不变。
+
+## v6.0.10-pw.2 (2026-08-08)
+
+- FIX#179-NETEASE-GAME-DIRECT：重建首段 fused SRS shunt rule；两个网易游戏服务主机在国内游戏 shunt rule 前固定由 `direct` 处理。
+
+## v6.0.9-pw.1 (2026-07-19)
+
+- 重建 66 条 fused shunt rule；路由器端无桌面进程身份，`api.github.com` 通过前置通用工具组段处理。
+
+## v6.0.8-pw.1 (2026-07-15)
+
+- 65 条 fused shunt rule 同步国内权威优先级，并为远程 `.srs` 使用发布版本缓存键。
+
+## v6.0.7-pw.1 (2026-07-14)
+
+- FIX#176：65 条 fused SRS shunt rule 重生成；国内域名段在通用国际 CDN / GeoIP fallback 之前，路由器端保持与源图相同的首匹配顺序。
+
+## v6.0.6-pw.1 (2026-07-14)
+
+- SYNC：fused SRS shunt rule 已随 v6.0.6 重建；Passwall 路由器端无法看到 LAN 客户端的 `WorkPro.exe` / `WorkProWebProcess.exe`，不承诺进程级命中。
+
+## v6.0.5-pw.1 (2026-07-14)
+
+- PLATFORM：fused SRS shunt rule 已重建；Passwall 路由器端无法看到 LAN 客户端 WorkPro.exe，不承诺进程级命中。
+
+## v6.0.4-pw.1 (2026-07-13)
+
+- DIRECT-ITWDB：从 `scki-fused-008-direct.srs` 重建默认直连 shunt rule；`itwdb.com` 与 WorkPro 子域名不再需要 Passwall 手写域名列表。
+
+## v6.0.3-pw.1 (2026-07-12)
+
+- SYNC：从 v6.0.3 fused sing-box 目标重新生成 65 条非空 `rule-set:remote` shunt rule、apply 脚本和参考配置。
+- AI-PRECEDENCE：新增的 AI telemetry guard 在广告和国外网站 fallback 前保持顺序生效，所有 shunt URL 只引用仓库 fused `.srs`。
+
+## v6.0.2-pw.1 (2026-07-10)
+
+- SYNC：从 v6.0.2 fused sing-box 目标重新生成 64 条非空 `rule-set:remote` shunt rule、apply 脚本和参考配置。
+- PERF：64 个 `.srs` 聚合约 4.06 MiB，继承 GEOIP/ASN 目标物化和全局精确去重；按最终 SRS 的 IP 内容设置 Domain/IP 双列表标志，不直接调用任何上游规则集。
+
+## v6.0.1-pw.1 (2026-07-10)
+
+- SYNC：从 fused sing-box JSON 重新生成 apply 脚本、参考配置和 68 条 shunt rule，基线升级到 Clash Party v6.0.1。
+- DELIVERY：Passwall 保持 `rule-set:remote` `.srs` 原生 fallback；Issue #174 的移动端文本分片不改变其 68 条 shunt 映射或策略语义。
+
+## v6.0.0-pw.2 (2026-07-09)
+
+- FUSED-PASSWALL：`Passwall(xray+sing-box)-apply.sh`、参考 `.conf` 与 `shunt-rules/*.list` 改由 `tools/generate-fused-fallback-artifacts.js` 生成。
+- SCOPE：每条 shunt rule 只引用对应的 `rulesets/generated/fused/sing-box/*.srs` 远程规则集；旧 33 条手写域名/IP 展平列表全部移除，Passwall 不再作为规则内容维护面。
+
+## v6.0.0-pw.1 (2026-07-09)
+
+- META：跟随 Clash Party v6.0.0 更新版本元数据。
+- SCOPE：Passwall 继续作为 shunt_rules 展平降级参考；融合规则集主线不从 Passwall 反向生成。
+
+## v5.4.39-pw.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.39 更新版本元数据。
+- N/A：Passwall 展平 shunt rules 不消费 Mihomo `.mrs` rule-provider；`.list` 规则语义延续 v5.4.38-pw.1。
+
+## v5.4.38-pw.1 (2026-07-09)
+
+- META：跟随 Clash Party v5.4.38 更新版本元数据。
+- SCOPE：Passwall 展平 shunt rules 继续保持本地 `.list` 结构，不直接引用公共 supplemental URL。
+
+## v5.4.37-pw.1 (2026-06-29)
+
+- META#170-DNS-POLICY：跟随 Clash Party v5.4.37 更新版本元数据。
+- N/A：Passwall 展平 shunt rule 不承载 Mihomo `nameserver-policy` DNS 字段；`.list` 规则语义不变。
+
+## v5.4.36-pw.1 (2026-06-29)
+
+- CLEAN#171-DIRECT：跟随 Clash Party v5.4.36 清理结果，删除展平规则 `channel4.com` / `sky.com`，其余候选不适用于 Passwall 展平层或需继续保留。
+- 版本元数据同步；shunt 规则数量相应减少。
+
+## v5.4.35-pw.1 (2026-06-28)
+
+- ★ CLEAN#170-UPSTREAM：跟随 Clash Party v5.4.35 基线更新版本元数据。
+- N/A：Passwall 展平降级参考不消费 Mihomo rule-provider；`domain:encoretvb.com` 仍作为香港流媒体静态覆盖保留，33 条 shunt rule 语义不变。
+
+## v5.4.34-pw.1 (2026-06-28)
+
+- ★ FIX#169-AMAP：`27-cn-site.list`、apply 脚本与参考 `.conf` 补充高德地图 / AMap 核心域名直连兜底。
+- 覆盖 `a-map.cn` / `amap.com` / `amapauto.com` / `anav.com` / `autonavi.com` / `gaode.com` 等，避免 `webapi.amap.com` 依赖宽泛 CN 分类。
+
+## v5.4.33-pw.1 (2026-06-27)
+
+- ★ FEAT#169-AI-CODING：`02-ai-service.list`、apply 脚本与参考 `.conf` 补充 AI 编程工具域名兜底。
+- N/A：VPSDance 暂无 sing-box `.srs` 输出，Passwall 降级参考不直接使用 `rule-set:remote`。
+
+## v5.4.32-pw.1 (2026-06-25)
+
+- ★ FIX#168-CN-GAME：Passwall shunt rule 创建顺序调整为国内游戏早于国外游戏/国外网站，并补齐米哈游、网易、WeGame、完美世界、TapTap 等国内游戏域名。
+- `shunt-rules/21-cn-game.list` / `22-intl-game.list` 与 Passwall2 保持同源；`domain:mihoyo.com` 从国外游戏移入国内游戏。
+
+## v5.4.31-pw.1 (2026-06-20)
+
+- ★ FIX#167-DOUYIN：`08-cn-media.list`、apply 脚本与参考 `.conf` 补齐抖音 Web / `zjcdn.com` 视频 CDN 明确 `domain:` 兜底。
+- Passwall 降级参考继续使用展平 shunt rules，不承载客户端规则顺序；本轮只补国内流媒体域名覆盖。
+
+## v5.4.30-pw.1 (2026-06-17)
+
+- ★ FEAT#166-GOOGLE：新增 `30-google.list` 与第 20 条 `🔍 Google 服务` shunt rule，承载 `geosite:google` / `geoip:google` / `domain:scholar.google.com`。
+- 工具组重命名为 `31-tools.list`，仅保留非 Google 搜索和开发者服务；兜底列表顺延为 `32-final.list`，展平 shunt rules 总数调整为 33。
+
+## v5.4.29-pw.1 (2026-06-10)
+
+- N/A#165-LATENCY：Passwall 降级参考使用展平 shunt rules，不承载区域自动测速/健康检查字段；本轮仅元数据与 README 对齐 Clash Party v5.4.29。
+
+## v5.4.27-pw.1 (2026-06-07)
+
+- ★ CLEAN#165：`11-hbo-max.list` / apply 脚本删除已被 `geosite:hbo` 覆盖的 `domain:max.com` 与 `domain:hbomax.com` 本地兜底；v2fly domain-list-community 与 MetaCubeX geosite hbo 当前均包含这两个域名。
+
+## v5.4.26-pw.1 (2026-06-07)
+
+- 对齐基线 v5.4.26（FIX#164）。本产物**不受** `copilot.tencent.com` 误吞影响：Passwall AI 分流用 `geosite:copilot`（无 copilot 子串关键词，不会命中 `copilot.tencent.com`），且不消费 szkane `AiDomain.list`；`copilot.tencent.com` 顺流到国内直连规则，无需 `.list`/`.sh` 改动。仅 bump 版本。
+
+## v5.4.25-pw.2 (2026-06-05)
+
+- ★ MAINT#HEADER-LITE：apply 脚本头部移除多版本变更历史，仅保留轻量元信息并指向 `Passwall/CHANGELOG.md`，对齐仓库 CLAUDE.md §1.3 维护契约。
+
+## v5.4.25-pw.1 (2026-06-04)
+
+- ★ FIX#PW-KAKAO-P1：将 active Passwall 规则中的无效 `geosite:kakaotalk` 改为 `geosite:kakao`，并补 `domain:kakao.com` / `domain:kakaocorp.com` / `domain:kakaotalk.com` 兜底。
+- ★ FIX#PW-IDEMPOTENT-P3：apply 脚本默认 `--replace`，运行前删除同名 Smart-Config-Kit shunt rules，避免重复运行追加 32 条副本；保留 `--append` 作为显式追加模式。
+- ★ SYNC：版本头和参考 `.conf` 对齐 Clash Party v5.4.25。
 
 ## v5.4.23-pw.1 (2026-06-02)
 
